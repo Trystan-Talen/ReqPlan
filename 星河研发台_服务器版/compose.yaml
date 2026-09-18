@@ -1,0 +1,50 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_PATH: /app/data/xinghe.sqlite
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?请在 .env 中设置实际 HTTPS 站点地址}
+      TRUST_PROXY: "1"
+      XINGHE_SETUP_TOKEN: ${XINGHE_SETUP_TOKEN:-}
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-1}
+      BACKUP_DIRECTORY: /app/data/backups
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETAIN_COUNT: ${BACKUP_RETAIN_COUNT:-30}
+      BACKUP_RETRY_MINUTES: ${BACKUP_RETRY_MINUTES:-30}
+      BACKUP_INITIAL_DELAY_SECONDS: ${BACKUP_INITIAL_DELAY_SECONDS:-60}
+      BACKUP_SECONDARY_DIRECTORY: ${BACKUP_SECONDARY_DIRECTORY:-}
+    volumes:
+      - xinghe-data:/app/data
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  xinghe-data:

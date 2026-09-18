@@ -1,0 +1,11 @@
+/* ==========================================================================
+   Page · 项目成员 / 账号管理
+   views: membersView、usersView（app.js）。表格本体复用 components.css 的 .data-table。
+   ========================================================================== */
+
+.member-add form { display: grid; gap: 14px; }
+.role-description { display: grid; gap: var(--space-2); margin-top: 18px; padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: var(--text-sm); color: var(--text-2); line-height: 1.55; }
+.role-description div { display: flex; gap: 10px; }
+.role-description strong { flex: none; width: 56px; color: var(--text); font-weight: 600; }
+.project-member-role { width: auto !important; min-width: 120px; min-height: 32px !important; height: 32px; font-size: 13px !important; padding-top: var(--space-1) !important; padding-bottom: var(--space-1) !important; }
+

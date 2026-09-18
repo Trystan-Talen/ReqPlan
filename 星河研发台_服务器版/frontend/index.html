@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e0f13">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="same-origin">
+  <meta name="description" content="星河研发台：围绕项目协作，连接需求、任务与交付。">
+  <title>星河 · 研发管理台</title>
+  <link rel="icon" href="/icons/brand.svg" type="image/svg+xml">
+  <script src="/theme-init.js"></script>
+  <!-- Design system layers — order matters. See DESIGN.md. New page styles go in /design/pages/ and are linked here AND in design-system.html. -->
+  <link rel="stylesheet" href="/design/tokens.css">
+  <link rel="stylesheet" href="/design/base.css">
+  <link rel="stylesheet" href="/design/components.css">
+  <link rel="stylesheet" href="/design/layout.css">
+  <link rel="stylesheet" href="/design/pages/dashboard.css">
+  <link rel="stylesheet" href="/design/pages/tasks.css">
+  <link rel="stylesheet" href="/design/pages/members.css">
+  <link rel="stylesheet" href="/design/pages/work.css">
+  <link rel="stylesheet" href="/design/pages/timeline.css">
+  <link rel="stylesheet" href="/design/pages/document.css">
+  <link rel="stylesheet" href="/design/pages/styleguide.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳转到主要内容</a>
+  <div id="app"><main class="boot-screen" aria-live="polite"><span class="boot-orbit" aria-hidden="true"><i></i></span><p>正在连接工作空间…</p></main></div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+  <noscript><p class="notice notice-danger">请启用浏览器脚本后使用星河研发台。</p></noscript>
+</body>
+</html>

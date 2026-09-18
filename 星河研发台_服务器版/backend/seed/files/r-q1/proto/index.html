@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>原型 · 服务质量履约看板（r-q1）</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:20px;background:#f6f8fb;color:#1f2a41;
+       font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;font-size:13px}
+  .wrap{max-width:960px;margin:0 auto}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:12px;gap:12px;flex-wrap:wrap}
+  .eyebrow{font-size:10px;letter-spacing:.18em;color:#94a0b6;font-weight:700}
+  h1{margin:4px 0 0;font-size:17px}
+  .tag{font-size:11px;padding:4px 9px;border-radius:999px;background:#fdf1db;color:#a4701a;font-weight:700}
+  .tabs{display:flex;gap:6px;margin-bottom:12px}
+  .tab{border:1px solid #e0e5f0;background:#fff;color:#5b675f;padding:6px 13px;border-radius:9px;
+       font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .tab.on{background:#6d5ce7;border-color:#6d5ce7;color:#fff}
+  .card{background:#fff;border:1px solid #e6eaf3;border-radius:14px;padding:14px;margin-bottom:12px}
+  .card-h{display:flex;align-items:center;gap:8px;padding-bottom:10px;margin-bottom:12px;border-bottom:1px solid #f0f2f7}
+  .card-h b{font-size:12.5px}
+  .card-h .sub{margin-left:auto;font-size:11px;color:#94a0b6}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .kpi{border:1px solid #e6eaf3;border-radius:11px;padding:11px 12px;background:#fbfcfe}
+  .kpi .k{font-size:11px;color:#8792a8}
+  .kpi .v{font-size:19px;font-weight:800;margin:5px 0 2px;letter-spacing:-.02em}
+  .kpi .l{font-size:10.5px;color:#94a0b6}
+  .ok{color:#12805c}.bad{color:#c0392b}
+  .badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
+  .b-ok{background:#e4f6ee;color:#12805c}
+  .b-bad{background:#fdeceb;color:#c0392b}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;font-size:11px;color:#8792a8;font-weight:700;padding:0 8px 8px;border-bottom:1px solid #f0f2f7}
+  td{padding:9px 8px;border-bottom:1px solid #f5f7fb}
+  tr:last-child td{border-bottom:0}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .fn{outline:1px dashed #d9e0ff;outline-offset:4px;border-radius:8px}
+  .hide{display:none}
+  .foot{font-size:11px;color:#94a0b6;line-height:1.7;margin-top:14px}
+  @media(max-width:760px){.grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <div class="eyebrow">PROTOTYPE · 非真实数据</div>
+      <h1>服务质量 · 履约看板</h1>
+    </div>
+    <span class="tag">r-q1 · 静态演示</span>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" id="tab-c">客户端</button>
+    <button class="tab" id="tab-a">管理端</button>
+  </div>
+
+  <!-- 客户端 -->
+  <div id="view-c">
+    <div class="card">
+      <div class="card-h"><b>本月履约</b><span class="sub">2026-08 · 自然月</span></div>
+      <div class="grid">
+        <div class="kpi"><div class="k">请求成功率</div><div class="v ok">99.72%</div><div class="l">达标线 ≥ 99.5% · 达标</div></div>
+        <div class="kpi"><div class="k">履约可用率</div><div class="v ok">99.31%</div><div class="l">达标线 ≥ 99.0% · 达标</div></div>
+        <div class="kpi"><div class="k">首字节时延 P95</div><div class="v bad">912ms</div><div class="l">达标线 ≤ 800ms · 未达标</div></div>
+        <div class="kpi"><div class="k">工单响应 P90</div><div class="v ok">2.4h</div><div class="l">达标线 ≤ 4h · 达标</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><b>近 6 个月履约</b><span class="sub">与月度账单同周期</span></div>
+      <table>
+        <thead><tr><th>月份</th><th class="num">请求成功率</th><th class="num">履约可用率</th><th class="num">P95 时延</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>2026-08</td><td class="num">99.72%</td><td class="num">99.31%</td><td class="num">912ms</td><td><span class="badge b-bad">未达标</span></td></tr>
+          <tr><td>2026-07</td><td class="num">99.88%</td><td class="num">99.64%</td><td class="num">741ms</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>2026-06</td><td class="num">99.91%</td><td class="num">99.70%</td><td class="num">702ms</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>2026-05</td><td class="num">99.85%</td><td class="num">99.58%</td><td class="num">768ms</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>2026-04</td><td class="num">99.79%</td><td class="num">99.44%</td><td class="num">795ms</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>2026-03</td><td class="num">99.93%</td><td class="num">99.71%</td><td class="num">688ms</td><td><span class="badge b-ok">达标</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 管理端 -->
+  <div id="view-a" class="hide">
+    <div class="card">
+      <div class="card-h"><b>客户履约总览</b><span class="sub">2026-08 · 按履约风险排序</span></div>
+      <table>
+        <thead><tr><th>客户</th><th>档位</th><th class="num">请求成功率</th><th class="num">履约可用率</th><th class="num">P95 时延</th><th>连续未达标</th><th>结论</th></tr></thead>
+        <tbody>
+          <tr><td>启明科技</td><td>P4 · Q2</td><td class="num">99.72%</td><td class="num">99.31%</td><td class="num">912ms</td><td>1 个月</td><td><span class="badge b-bad">未达标</span></td></tr>
+          <tr><td>海纳数据</td><td>P4 · Q3</td><td class="num">99.86%</td><td class="num">99.52%</td><td class="num">790ms</td><td>0</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>云栖智能</td><td>P6 · Q3</td><td class="num">99.95%</td><td class="num">99.77%</td><td class="num">655ms</td><td>0</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>北辰网络</td><td>P6 · Q2</td><td class="num">99.90%</td><td class="num">99.68%</td><td class="num">712ms</td><td>0</td><td><span class="badge b-ok">达标</span></td></tr>
+          <tr><td>恒晟信息</td><td>P8 · Q4</td><td class="num">99.97%</td><td class="num">99.81%</td><td class="num">598ms</td><td>0</td><td><span class="badge b-ok">达标</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-h"><b>风险提示</b><span class="sub">仅本平台数据</span></div>
+      <div style="font-size:12.5px;line-height:1.9;color:#4a5568">
+        启明科技本月首字节时延 P95 超出达标线 112ms，为其连续第 1 个未达标月。建议在续约沟通前完成一次链路排查。
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    本页为需求评审用的交互原型：数据为写死的演示数据，不连接任何后端，也不会读取研发台的接口与登录态。<br>
+    档位 P 为采购折、Q 为质量等级，二者独立；履约判定只读本平台遥测，不跨平台取数。
+  </div>
+</div>
+
+<script>
+  var tabC = document.getElementById('tab-c');
+  var tabA = document.getElementById('tab-a');
+  tabC.onclick = function(){
+    tabC.classList.add('on'); tabA.classList.remove('on');
+    document.getElementById('view-c').classList.remove('hide');
+    document.getElementById('view-a').classList.add('hide');
+  };
+  tabA.onclick = function(){
+    tabA.classList.add('on'); tabC.classList.remove('on');
+    document.getElementById('view-a').classList.remove('hide');
+    document.getElementById('view-c').classList.add('hide');
+  };
+
+  // 沙箱自检：页面被放在无 allow-same-origin 的沙箱里，
+  // 这段请求必然失败，控制台会留下跨域/沙箱拦截的报错——
+  // 正是"原型碰不到真实数据"的证据。
+  fetch('/api/bootstrap')
+    .then(function(r){return r.json()})
+    .then(function(d){console.warn('[原型] 意外读到了真实接口数据', d)})
+    .catch(function(e){console.error('[原型] 已按预期被沙箱拦截，无法访问研发台接口：', e.message)});
+</script>
+</body>
+</html>

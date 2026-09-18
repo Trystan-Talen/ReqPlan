@@ -1,0 +1,251 @@
+/* ==========================================================================
+   星河研发台 · 设计令牌（Design Tokens）
+   --------------------------------------------------------------------------
+   这是整个界面里【唯一】允许出现颜色字面量的文件。
+   组件、布局和页面样式只能引用 var(--…)；需要新颜色时先在这里加令牌，
+   并在 DESIGN.md 的令牌表里登记用途。自动测试 design-system.test.mjs 会检查。
+
+   分组：
+   1. 排版 / 间距 / 圆角 / 动效 / 层级（与主题无关）
+   2. 主题色（浅色默认；深色在下方两处【同步】重定义）
+   3. 夜色区域（侧栏、首页横幅、登录页，始终为深色，不随主题变化）
+   4. 数据可视化与项目色（与主题无关）
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* 1. Typography --------------------------------------------------------- */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --text-2xs: 10.5px;   /* 甘特刻度副标 */
+  --text-xs: 11.5px;    /* 表头、元信息、计数 */
+  --text-sm: 12.5px;    /* 次要正文、表单标签、小按钮 */
+  --text-base: 13.5px;  /* 控件、列表标题 */
+  --text-md: 14px;      /* 页面正文（body） */
+  --text-lg: 15px;      /* 面板标题 */
+  --text-xl: 17px;      /* 分区标题 */
+  --text-2xl: 21px;     /* 抽屉内实体标题 */
+  --text-3xl: 30px;     /* 页面标题 h1 */
+  --text-display: 34px; /* 指标大数字 */
+
+  /* Spacing (4px grid) ---------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 44px;
+  /* Layout rhythm：区块之间只用这三个间距，不要在组件上写外边距来隔开兄弟元素 */
+  --gap-block: 18px;    /* 页面区块之间、并排栏之间（#view 纵向栈 / 布局网格） */
+  --gap-section: 12px;  /* 分区标题与其内容之间（.section-block） */
+  --gap-card: 14px;     /* 卡片网格内的卡片之间 */
+
+  /* Radius / elevation / motion / layers ---------------------------------- */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --duration-fast: .15s;
+  --duration-base: .25s;
+  --duration-slow: .35s;
+  --z-sticky: 3;
+  --z-topbar: 20;
+  --z-sidebar-shade: 25;
+  --z-sidebar: 30;
+  --z-skip-link: 100;
+  --z-toast: 1000;
+  --sidebar-width: 256px;
+  --topbar-height: 60px;
+  --content-max: 1440px;
+
+  /* 2. Theme colors (light) ----------------------------------------------- */
+  --bg: #f4f3ef;
+  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(51, 85, 255, .06), transparent 60%);
+  --surface: #ffffff;
+  --surface-2: #fafaf7;
+  --surface-3: #f1f0eb;
+  --surface-hover: #f6f5f1;
+  --border: #e6e4dd;
+  --border-strong: #d4d2ca;
+  --text: #15161a;
+  --text-2: #595b63;
+  --text-3: #8b8d94;
+  --ink: #15161a;
+  --ink-text: #ffffff;
+
+  --accent: #3355ff;
+  --accent-strong: #2440e0;
+  --accent-soft: #eef1ff;
+  --accent-ring: rgba(51, 85, 255, .28);
+
+  --sidebar: #0e0f13;
+  --sidebar-2: #16171d;
+  --sidebar-border: rgba(255, 255, 255, .07);
+  --sidebar-text: #a3a6b1;
+  --sidebar-text-strong: #f4f4f6;
+  --sidebar-hover: rgba(255, 255, 255, .05);
+  --sidebar-active: rgba(255, 255, 255, .09);
+
+  /* Semantic tones: 每个色调都有文字色 + 浅底色，状态标签只从这里取 */
+  --c-slate: #667085;   --c-slate-bg: #f0f1f3;
+  --c-violet: #6e56f8;  --c-violet-bg: #f1eeff;
+  --c-blue: #2f6bff;    --c-blue-bg: #ebf1ff;
+  --c-amber: #b7700a;   --c-amber-bg: #fff3dc;
+  --c-green: #12875a;   --c-green-bg: #e5f6ee;
+  --c-gray: #8d9097;    --c-gray-bg: #efefed;
+  --c-red: #dc3b40;     --c-red-bg: #fdecec;
+  --c-orange: #e0620d;  --c-orange-bg: #fff0e5;
+
+  --shadow-xs: 0 1px 0 rgba(20, 20, 30, .03);
+  --shadow-sm: 0 1px 2px rgba(20, 20, 30, .05), 0 0 0 1px rgba(20, 20, 30, .02);
+  --shadow-md: 0 1px 2px rgba(20, 20, 30, .04), 0 10px 30px -14px rgba(20, 20, 40, .18);
+  --shadow-lg: 0 24px 70px -20px rgba(10, 10, 30, .35), 0 2px 6px rgba(10, 10, 30, .06);
+  --backdrop: rgba(8, 9, 14, .42);
+  --preview-canvas: #ffffff;
+
+  /* 3. Night surfaces (always dark) --------------------------------------- */
+  --night-bg: #0b0c10;
+  --night-surface: #0e0f13;
+  --on-night: #ffffff;
+  --on-night-strong: #f4f4f6;
+  --on-night-2: rgba(255, 255, 255, .64);
+  --on-night-3: rgba(255, 255, 255, .45);
+  --on-night-4: rgba(255, 255, 255, .34);
+  --night-fill: rgba(255, 255, 255, .04);
+  --night-line: rgba(255, 255, 255, .08);
+  --night-line-strong: rgba(255, 255, 255, .16);
+  --night-orbit: rgba(255, 255, 255, .06);
+  --night-orbit-faint: rgba(255, 255, 255, .012);
+  --glow-violet: rgba(124, 108, 255, .28);
+  --glow-cyan: rgba(34, 195, 230, .22);
+  --brand-from: #8f82ff;
+  --brand-to: #3fd0ec;
+  --brand-soft-from: #a99dff;
+  --brand-soft-to: #5fd8f0;
+  --brand-ring: rgba(143, 130, 255, .25);
+  --night-violet: #a594ff;
+  --night-blue: #7ba2ff;
+  --night-green: #4fd39a;
+  --on-night-button-hover: #e9e9ff;
+  --starfield:
+    radial-gradient(1px 1px at 12% 18%, #fff, transparent 60%), radial-gradient(1px 1px at 32% 62%, #fff, transparent 60%),
+    radial-gradient(1.5px 1.5px at 58% 28%, #fff, transparent 60%), radial-gradient(1px 1px at 78% 72%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 88% 16%, #fff, transparent 60%), radial-gradient(1px 1px at 22% 88%, #fff, transparent 60%),
+    radial-gradient(1.5px 1.5px at 44% 44%, #cfd6ff, transparent 60%), radial-gradient(1px 1px at 66% 90%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 6% 52%, #fff, transparent 60%), radial-gradient(1px 1px at 94% 46%, #fff, transparent 60%);
+  --inner-highlight: rgba(255, 255, 255, .16);
+  --on-accent: #ffffff;
+  --knob: #ffffff;
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, .25);
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .08);
+  --shadow-brand: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 6px 18px -6px rgba(124, 108, 255, .55);
+  --toast-bg: #15161a;
+  --toast-text: #f4f4f6;
+  --toast-success: #1f9d63;
+  --toast-error: #dc3b40;
+  --shadow-toast: 0 16px 40px -12px rgba(0, 0, 0, .45);
+  --code-bg: #0e0f13;
+  --code-text: #e7e7ea;
+
+  /* 4. Data visualisation & project colors -------------------------------- */
+  --bar-wait: #8a93a6;
+  --bar-develop: #2f6bff;
+  --bar-test: #d88a0a;
+  --bar-done: #16935b;
+  --bar-terminated: #a4a6ab;
+  --bar-overdue: #dc3b40;
+  --bar-overdue-stripe: #e5575b;
+  --shadow-bar: 0 1px 2px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .18);
+  --project-1: #3355ff;
+  --project-2: #0f9f7a;
+  --project-3: #e0620d;
+  --project-4: #8b5cf6;
+  --project-5: #d6336c;
+  --project-6: #0891b2;
+  --project-none: #3a3c46;
+}
+
+/* Dark theme — 修改这里时，必须同步修改下面 prefers-color-scheme 里的同名令牌 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0c0f;
+  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(92, 116, 255, .10), transparent 60%);
+  --surface: #131419;
+  --surface-2: #17181e;
+  --surface-3: #1d1f26;
+  --surface-hover: #1a1c22;
+  --border: #25272f;
+  --border-strong: #34363f;
+  --text: #ececef;
+  --text-2: #a4a7b0;
+  --text-3: #6f727b;
+  --ink: #f1f1f3;
+  --ink-text: #0e0f13;
+  --accent: #6f86ff;
+  --accent-strong: #8b9dff;
+  --accent-soft: rgba(111, 134, 255, .14);
+  --accent-ring: rgba(111, 134, 255, .35);
+  --sidebar: #08090b;
+  --sidebar-2: #101116;
+  --c-slate: #a0a7b5;   --c-slate-bg: rgba(160, 167, 181, .13);
+  --c-violet: #a594ff;  --c-violet-bg: rgba(165, 148, 255, .14);
+  --c-blue: #7ba2ff;    --c-blue-bg: rgba(123, 162, 255, .14);
+  --c-amber: #f2b24c;   --c-amber-bg: rgba(242, 178, 76, .14);
+  --c-green: #4fd39a;   --c-green-bg: rgba(79, 211, 154, .13);
+  --c-gray: #8b8e96;    --c-gray-bg: rgba(139, 142, 150, .14);
+  --c-red: #ff6b6f;     --c-red-bg: rgba(255, 107, 111, .13);
+  --c-orange: #ff9a57;  --c-orange-bg: rgba(255, 154, 87, .13);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-md: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .6);
+  --shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, .8);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0b0c0f;
+    --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(92, 116, 255, .10), transparent 60%);
+    --surface: #131419;
+    --surface-2: #17181e;
+    --surface-3: #1d1f26;
+    --surface-hover: #1a1c22;
+    --border: #25272f;
+    --border-strong: #34363f;
+    --text: #ececef;
+    --text-2: #a4a7b0;
+    --text-3: #6f727b;
+    --ink: #f1f1f3;
+    --ink-text: #0e0f13;
+    --accent: #6f86ff;
+    --accent-strong: #8b9dff;
+    --accent-soft: rgba(111, 134, 255, .14);
+    --accent-ring: rgba(111, 134, 255, .35);
+    --sidebar: #08090b;
+    --sidebar-2: #101116;
+    --c-slate: #a0a7b5;   --c-slate-bg: rgba(160, 167, 181, .13);
+    --c-violet: #a594ff;  --c-violet-bg: rgba(165, 148, 255, .14);
+    --c-blue: #7ba2ff;    --c-blue-bg: rgba(123, 162, 255, .14);
+    --c-amber: #f2b24c;   --c-amber-bg: rgba(242, 178, 76, .14);
+    --c-green: #4fd39a;   --c-green-bg: rgba(79, 211, 154, .13);
+    --c-gray: #8b8e96;    --c-gray-bg: rgba(139, 142, 150, .14);
+    --c-red: #ff6b6f;     --c-red-bg: rgba(255, 107, 111, .13);
+    --c-orange: #ff9a57;  --c-orange-bg: rgba(255, 154, 87, .13);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-md: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .6);
+    --shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, .8);
+  }
+}
+
+/* Avatar colors are derived from --hue per person; the dark variant follows the theme. */
+:root { --avatar-fg-l: 32%; --avatar-fg-s: 55%; --avatar-bg-l: 90%; --avatar-bg-s: 75%; }
+:root[data-theme="dark"] { --avatar-fg-l: 82%; --avatar-fg-s: 80%; --avatar-bg-l: 22%; --avatar-bg-s: 35%; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --avatar-fg-l: 82%; --avatar-fg-s: 80%; --avatar-bg-l: 22%; --avatar-bg-s: 35%; }
+}

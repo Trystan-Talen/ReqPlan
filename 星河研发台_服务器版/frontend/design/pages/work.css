@@ -1,0 +1,39 @@
+/* ==========================================================================
+   Page · 我的工作 / 站内提醒 / 交付报表
+   views: renderPersonalWork、renderReminders、renderReports（work-ui.js）
+   ========================================================================== */
+
+.work-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-block); align-items: start; }
+.work-list { display: grid; padding: 6px; }
+.work-item { display: flex; align-items: center; gap: var(--space-3); padding: 11px var(--space-3); border-radius: 10px; transition: background .12s; }
+.work-item:hover { background: var(--surface-hover); }
+.work-item > div { flex: 1; min-width: 0; }
+.work-item p { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item .item-title { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item.is-read { opacity: .62; }
+.work-empty { padding: var(--space-7) 18px; text-align: center; color: var(--text-3); font-size: 13px; }
+.notice-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.notice-dot.is-read { background: var(--border-strong); box-shadow: none; }
+
+/* Reports */
+.rate-cell { display: inline-flex; align-items: center; gap: 10px; }
+.rate-track { width: 80px; height: 6px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; }
+.rate-track i { display: block; height: 100%; border-radius: inherit; background: var(--c-red); }
+.trend-legend { display: flex; gap: 18px; margin: var(--space-4) 0 var(--space-2); font-size: 12px; color: var(--text-2); }
+.trend-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.trend-legend span::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c-violet); }
+.trend-legend span:nth-child(2)::before { background: var(--c-green); }
+.trend-chart { display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px; height: 200px; padding: 14px var(--space-1) 0; margin-bottom: var(--space-4); border-bottom: 1px solid var(--border); background: repeating-linear-gradient(to top, transparent 0 49px, var(--border) 49px 50px); }
+.trend-week { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); min-width: 0; }
+.trend-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: var(--space-1); }
+.trend-bars i { width: min(16px, 40%); min-height: 2px; border-radius: 5px 5px 2px 2px; background: var(--c-violet); transition: height .5s var(--ease); }
+.trend-bars i:nth-child(2) { background: var(--c-green); }
+.trend-week > span { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); padding-bottom: 6px; }
+.cycle-stat { margin-top: 18px; padding: 14px var(--space-4); border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px var(--space-4); }
+.cycle-stat > span { font-size: 13px; font-weight: 560; color: var(--text-2); }
+.cycle-stat strong { grid-row: span 2; font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 680; letter-spacing: -.03em; }
+.cycle-stat strong small { font-size: 13px; color: var(--text-3); font-weight: 500; }
+
+@media (max-width: 1240px) {
+  .work-columns { grid-template-columns: minmax(0, 1fr); }
+}

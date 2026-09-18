@@ -1,0 +1,16 @@
+data/db.json
+data/files/
+data/sessions.json
+*.tmp
+
+# Runtime data and local credentials
+data/
+data.seed.json
+.claude/
+.maintenance-backup-*/
+**/backend/var/
+**/*.sqlite*
+**/node_modules/
+**/.env
+*.log
+.DS_Store

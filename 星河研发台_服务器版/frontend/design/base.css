@@ -1,0 +1,72 @@
+/* ==========================================================================
+   Base — 重置、排版默认值、工具类、焦点、共享动画、品牌标志
+   这里只放「元素级」和「全局工具类」规则；不要在这里写业务组件。
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font);
+  font-size: var(--text-md);
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg-grain), var(--bg);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "tnum" 1;
+}
+h1, h2, h3, h4, p, dl, dd, ol, ul, figure { margin: 0; }
+ol, ul { padding: 0; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -.015em; color: var(--text); }
+a { color: inherit; text-decoration: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+button:disabled { cursor: not-allowed; }
+img, svg { display: block; }
+table { border-collapse: collapse; width: 100%; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+[hidden] { display: none !important; }
+::selection { background: var(--accent-ring); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-xs); }
+body.dialog-open { overflow: hidden; }
+
+/* ---------- Utilities ---------- */
+.icon { width: 16px; height: 16px; flex: none; }
+.sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.skip-link { position: fixed; left: var(--space-4); top: -60px; z-index: var(--z-skip-link); background: var(--ink); color: var(--ink-text); padding: 10px 14px; border-radius: 10px; transition: top .2s var(--ease); }
+.skip-link:focus { top: var(--space-4); }
+.muted { color: var(--text-3); }
+.small { font-size: 12px; }
+.mono { font-family: var(--font-mono); }
+.required { color: var(--c-red); }
+.overdue-text { color: var(--c-red) !important; }
+.full-width { grid-column: 1 / -1; }
+
+/* ---------- Shared motion ---------- */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { transform: translateY(10px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes drawer-in { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes twinkle { from { opacity: .45; } to { opacity: .9; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* ---------- Boot ---------- */
+.boot-screen { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 18px; color: var(--text-3); }
+.boot-orbit { width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--border-strong); position: relative; animation: spin 1.4s linear infinite; }
+.boot-orbit i { position: absolute; width: 9px; height: 9px; border-radius: 50%; top: -5px; left: 50%; margin-left: -4.5px; background: linear-gradient(135deg, var(--brand-from), var(--brand-to)); box-shadow: 0 0 12px var(--brand-from); }
+
+/* ---------- Brand ---------- */
+.brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.brand-mark { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; color: var(--on-night); background: var(--night-surface); box-shadow: var(--shadow-brand); }
+.brand-mark svg { width: 34px; height: 34px; }
+.brand-stop-from { stop-color: var(--brand-from); }
+.brand-stop-to { stop-color: var(--brand-to); }
+.brand strong { display: block; font-size: var(--text-lg); font-weight: 650; letter-spacing: .01em; }
+.brand small { display: block; font-size: var(--text-xs); opacity: .6; letter-spacing: .06em; }

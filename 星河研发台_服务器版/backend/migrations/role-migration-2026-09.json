@@ -1,0 +1,14 @@
+{
+  "description": "2026-09-17 确认的角色改版：取消项目经理，改为产品经理 / 主开发；顾远增加管理层身份。",
+  "executives": ["u-manager"],
+  "memberships": [
+    { "projectId": "p-oss", "userId": "u-dev2", "role": "lead", "note": "开源版可插拔资源录入 · 周可 · 项目经理 → 主开发" },
+    { "projectId": "p-oss", "userId": "u-manager", "role": "product", "note": "开源版可插拔资源录入 · 顾远 · 项目经理 → 产品经理" },
+    { "projectId": "p-res", "userId": "u-product", "role": "product", "note": "智能路由 P1（算法升级） · 林小满 · 项目经理 → 产品经理" },
+    { "projectId": "p-res", "userId": "u-manager", "role": "product", "note": "智能路由 P1（算法升级） · 顾远 · 项目经理 → 产品经理" },
+    { "projectId": "p-res", "userId": "u-dev2", "role": "lead", "note": "智能路由 P1（算法升级） · 周可 · 开发 → 主开发" },
+    { "projectId": "p-exec", "userId": "u-manager", "role": "product", "note": "自研 API 聚合平台 · 顾远 · 项目经理 → 产品经理" },
+    { "projectId": "p-exec", "userId": "u-dev2", "role": "lead", "note": "自研 API 聚合平台 · 周可 · 开发 → 主开发" },
+    { "projectId": "p-69b81bef-2395-4a1e-bef7-463208c76e7e", "userId": "u-manager", "role": "product", "note": "测试项目1 · 顾远 · 项目经理 → 产品经理" }
+  ]
+}

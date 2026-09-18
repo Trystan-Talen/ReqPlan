@@ -1,0 +1,23 @@
+{
+  "name": "xinghe-server-workspace",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15 <25"
+  },
+  "scripts": {
+    "dev": "node deploy/launch-local.mjs",
+    "start:api": "node backend/server.mjs",
+    "test": "node --test backend/tests/*.test.mjs",
+    "import:legacy": "node backend/scripts/import-legacy.mjs",
+    "accounts": "node backend/scripts/accounts.mjs",
+    "backup": "node backend/scripts/backup.mjs",
+    "restore:check": "node backend/scripts/restore-check.mjs",
+    "import:attachment-history": "node backend/scripts/import-attachment-history.mjs",
+    "prepare:legacy": "node backend/scripts/prepare-legacy.mjs",
+    "start:local": "node deploy/launch-local.mjs",
+    "recover:admin": "node deploy/admin-recovery.mjs",
+    "migrate:roles": "node backend/scripts/migrate-roles.mjs"
+  }
+}

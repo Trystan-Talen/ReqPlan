@@ -1,0 +1,65 @@
+name: 项目检查
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: 定位独立项目或嵌套项目
+        id: locate
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const matches=[];
+          function scan(directory,depth=0){
+            if(depth>5)return;
+            const candidate=path.join(directory,'package.json');
+            if(fs.existsSync(candidate)){
+              try{if(JSON.parse(fs.readFileSync(candidate,'utf8')).name==='xinghe-server-workspace')matches.push(directory);}catch{}
+            }
+            for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+              if(entry.isDirectory()&&!entry.name.startsWith('.')&&!['node_modules','var','backups'].includes(entry.name))scan(path.join(directory,entry.name),depth+1);
+            }
+          }
+          scan('.');
+          if(matches.length!==1)throw new Error('必须存在且仅存在一个星河服务器项目。');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`directory=${matches[0]}\n`);
+          NODE
+      - name: 检查全部源文件语法
+        working-directory: ${{ steps.locate.outputs.directory }}
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {execFileSync} from 'node:child_process';
+          for(const root of ['backend','frontend','deploy']){
+            function check(directory){
+              for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+                if(['var','node_modules','backups'].includes(entry.name))continue;
+                const file=path.join(directory,entry.name);
+                if(entry.isDirectory())check(file);
+                else if(/\.(mjs|js)$/.test(entry.name))execFileSync(process.execPath,['--check',file],{stdio:'inherit'});
+              }
+            }
+            check(root);
+          }
+          NODE
+      - name: 运行全部隔离测试
+        working-directory: ${{ steps.locate.outputs.directory }}
+        env:
+          NODE_ENV: test
+          BACKUP_ENABLED: '0'
+          DATABASE_PATH: ':memory:'
+        run: npm test

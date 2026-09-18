@@ -1,0 +1,56 @@
+/* ==========================================================================
+   Page · 设计系统样式指南（/design-system.html）
+   只服务于样式指南本身的排版；所有样例使用真实组件类，不在这里重写组件外观。
+   ========================================================================== */
+
+.sg-shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+.sg-nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: var(--space-5) var(--space-3); background: var(--sidebar); border-right: 1px solid var(--sidebar-border); }
+.sg-nav .brand { padding: 0 var(--space-2) var(--space-5); }
+.sg-nav .brand strong { color: var(--sidebar-text-strong); }
+.sg-nav .brand small { color: var(--sidebar-text); }
+.sg-nav a { display: block; padding: 7px 10px; border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--sidebar-text); }
+.sg-nav a:hover { background: var(--sidebar-hover); color: var(--sidebar-text-strong); }
+.sg-main { min-width: 0; max-width: 1180px; padding: var(--space-7) 40px 80px; }
+.sg-topline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-2); }
+.sg-section { padding-top: 40px; margin-top: 40px; border-top: 1px solid var(--border); scroll-margin-top: var(--space-4); }
+.sg-section:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+.sg-section > h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.sg-section > p { margin-top: 6px; max-width: 760px; color: var(--text-2); line-height: 1.75; }
+.sg-block { margin-top: var(--space-6); }
+.sg-block > h3 { font-size: var(--text-base); font-weight: 650; color: var(--text-2); margin-bottom: 10px; }
+.sg-demo { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-5); border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); }
+.sg-demo.is-stack { display: grid; gap: var(--space-4); }
+.sg-demo.is-plain { display: block; padding: 0; background: none; border: 0; }
+.sg-code { margin: 10px 0 0; padding: var(--space-3) 14px; border-radius: var(--radius); background: var(--code-bg); color: var(--code-text); font-family: var(--font-mono); font-size: 12px; line-height: 1.7; overflow-x: auto; white-space: pre; }
+.sg-rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); margin-top: var(--space-5); }
+.sg-rule { padding: var(--space-4); border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); }
+.sg-rule strong { display: block; font-size: var(--text-lg); margin-bottom: 6px; }
+.sg-rule p { font-size: 13px; color: var(--text-2); line-height: 1.7; }
+.sg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+.sg-swatch { overflow: hidden; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+.sg-swatch i { display: block; height: 56px; border-bottom: 1px solid var(--border); background: var(--swatch); }
+.sg-swatch div { padding: var(--space-2) 10px; }
+.sg-swatch code { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+.sg-swatch small { display: block; margin-top: 2px; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-type { display: grid; gap: 10px; }
+.sg-type-row { display: grid; grid-template-columns: 150px 1fr; align-items: baseline; gap: var(--space-4); }
+.sg-type-row > span { font-size: var(--size); font-weight: var(--weight, 500); line-height: 1.3; }
+.sg-type-row code { font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.sg-scale { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.sg-scale span { display: grid; justify-items: center; gap: 6px; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.sg-scale i { display: block; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.sg-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.sg-mock-dialog { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); overflow: hidden; }
+.sg-mock-dialog .dialog-body { padding: 18px 22px; }
+.sg-mock-caption { margin-top: var(--space-2); font-size: 12px; color: var(--text-3); }
+.sg-table-note { font-size: 12.5px; color: var(--text-2); line-height: 1.8; }
+.sg-table-note td, .sg-table-note th { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.sg-table-note th { color: var(--text-3); font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .sg-shell { grid-template-columns: minmax(0, 1fr); }
+  .sg-nav { display: none; }
+  .sg-main { padding: var(--space-5) var(--space-4) 60px; }
+  .sg-rules, .sg-grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .sg-type-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}

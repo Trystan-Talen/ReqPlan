@@ -1,0 +1,31 @@
+{
+  "projects": 3,
+  "requirements": 55,
+  "tasks": 79,
+  "users": 6,
+  "attachments": 2,
+  "collections": {
+    "projects": {
+      "count": 3,
+      "sourceSha256": "4d8e95a05102a6fda17cecd8febcc45c286566c2279cb6fcf6cae6979a8014ea",
+      "seedSha256": "4d8e95a05102a6fda17cecd8febcc45c286566c2279cb6fcf6cae6979a8014ea",
+      "databaseSha256": "4d8e95a05102a6fda17cecd8febcc45c286566c2279cb6fcf6cae6979a8014ea"
+    },
+    "requirements": {
+      "count": 55,
+      "sourceSha256": "8409150d37e7761de1f1af6bbbd211dba40ca07908440d818def4b81013a20cb",
+      "seedSha256": "8409150d37e7761de1f1af6bbbd211dba40ca07908440d818def4b81013a20cb",
+      "databaseSha256": "8409150d37e7761de1f1af6bbbd211dba40ca07908440d818def4b81013a20cb"
+    },
+    "tasks": {
+      "count": 79,
+      "sourceSha256": "fdc7613d7239c86f509376cc7c12f95b792f809eeb81327b6057a0395a6c5976",
+      "seedSha256": "fdc7613d7239c86f509376cc7c12f95b792f809eeb81327b6057a0395a6c5976",
+      "databaseSha256": "fdc7613d7239c86f509376cc7c12f95b792f809eeb81327b6057a0395a6c5976"
+    }
+  },
+  "attachmentSha256": [
+    "d2bb83efc73ec8c22edd6b8e687ee573d03d0568e8c4130cc9b780711be44c4f",
+    "c3621540716e88652a78236c96f752eaae7c9a50696cc4d287bf0ad446dcefcd"
+  ]
+}

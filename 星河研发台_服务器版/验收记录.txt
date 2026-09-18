@@ -1,0 +1,676 @@
+# 历史测试输出：以下是此前版本的运行记录，不作为当前修复版的验收结果。
+# 当前验证范围与最新结果请查阅同目录《验收说明.md》。
+TAP version 13
+# (node:30161) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 默认选择唯一启用管理员并签发三十分钟令牌，明文不进入数据库或审计
+ok 1 - 默认选择唯一启用管理员并签发三十分钟令牌，明文不进入数据库或审计
+  ---
+  duration_ms: 137.43475
+  type: 'test'
+  ...
+# Subtest: 多名管理员必须明确选择，选定账号以外的管理员凭据保持原样
+ok 2 - 多名管理员必须明确选择，选定账号以外的管理员凭据保持原样
+  ---
+  duration_ms: 246.431083
+  type: 'test'
+  ...
+# Subtest: 无管理员、未知账号、普通成员及停用或待激活管理员全部拒绝
+ok 3 - 无管理员、未知账号、普通成员及停用或待激活管理员全部拒绝
+  ---
+  duration_ms: 379.624291
+  type: 'test'
+  ...
+# Subtest: 恢复立即撤销旧密码和会话，六位密码兑换后正常登录且令牌只能使用一次
+ok 4 - 恢复立即撤销旧密码和会话，六位密码兑换后正常登录且令牌只能使用一次
+  ---
+  duration_ms: 621.821083
+  type: 'test'
+  ...
+# Subtest: 恢复链接到期无效，重新签发废弃旧链接并支持仍需改密的管理员
+ok 5 - 恢复链接到期无效，重新签发废弃旧链接并支持仍需改密的管理员
+  ---
+  duration_ms: 373.184916
+  type: 'test'
+  ...
+# Subtest: 恢复不改管理员身份、项目角色、需求、任务、附件及原有业务数据
+ok 6 - 恢复不改管理员身份、项目角色、需求、任务、附件及原有业务数据
+  ---
+  duration_ms: 240.497791
+  type: 'test'
+  ...
+# Subtest: 无效的账号选择与恢复期限配置在修改密码前被拒绝
+ok 7 - 无效的账号选择与恢复期限配置在修改密码前被拒绝
+  ---
+  duration_ms: 119.536125
+  type: 'test'
+  ...
+# (node:30162) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 数据库为真实SQLite并启用外键与文件权限，事务失败回滚
+ok 8 - 数据库为真实SQLite并启用外键与文件权限，事务失败回滚
+  ---
+  duration_ms: 5.266958
+  type: 'test'
+  ...
+# Subtest: 密码以带随机盐的规定scrypt参数保存，验证正确且拒绝弱密码
+ok 9 - 密码以带随机盐的规定scrypt参数保存，验证正确且拒绝弱密码
+  ---
+  duration_ms: 633.837041
+  type: 'test'
+  ...
+# Subtest: 最低密码接受六个字符、拒绝五个字符，并继续兼容原十二位以上密码
+ok 10 - 最低密码接受六个字符、拒绝五个字符，并继续兼容原十二位以上密码
+  ---
+  duration_ms: 490.515291
+  type: 'test'
+  ...
+# Subtest: 六位密码可建立管理员并登录，五位密码无法初始化账号
+ok 11 - 六位密码可建立管理员并登录，五位密码无法初始化账号
+  ---
+  duration_ms: 254.740667
+  type: 'test'
+  ...
+# Subtest: 没有默认管理员或密码，首次管理员只能建立一次
+ok 12 - 没有默认管理员或密码，首次管理员只能建立一次
+  ---
+  duration_ms: 125.456167
+  type: 'test'
+  ...
+# Subtest: 首次管理员复用原导入账号及项目关联，采用明确填写的姓名
+ok 13 - 首次管理员复用原导入账号及项目关联，采用明确填写的姓名
+  ---
+  duration_ms: 125.073
+  type: 'test'
+  ...
+# Subtest: 会话令牌仅存哈希，cookie属性、跨站令牌与安全用户字段正确
+ok 14 - 会话令牌仅存哈希，cookie属性、跨站令牌与安全用户字段正确
+  ---
+  duration_ms: 245.227667
+  type: 'test'
+  ...
+# Subtest: 会话跨数据库重启持久化，到期立即失效且删除
+ok 15 - 会话跨数据库重启持久化，到期立即失效且删除
+  ---
+  duration_ms: 241.846958
+  type: 'test'
+  ...
+# Subtest: 登出使持久化会话失效，清除cookie可安全重复调用
+ok 16 - 登出使持久化会话失效，清除cookie可安全重复调用
+  ---
+  duration_ms: 227.910167
+  type: 'test'
+  ...
+# Subtest: 未知账号、待激活、停用与错误密码使用相同失败响应
+ok 17 - 未知账号、待激活、停用与错误密码使用相同失败响应
+  ---
+  duration_ms: 702.083458
+  type: 'test'
+  ...
+# Subtest: 失败登录触发持久化限流，窗口到期后可重试
+ok 18 - 失败登录触发持久化限流，窗口到期后可重试
+  ---
+  duration_ms: 457.58625
+  type: 'test'
+  ...
+# Subtest: 同一账号失败八次会被锁定，但不阻断共享网关下其他账号正确登录
+ok 19 - 同一账号失败八次会被锁定，但不阻断共享网关下其他账号正确登录
+  ---
+  duration_ms: 1250.459166
+  type: 'test'
+  ...
+# Subtest: 同一地址跨用户名累计失败达到地址阈值后被锁定，其他地址仍可登录
+ok 20 - 同一地址跨用户名累计失败达到地址阈值后被锁定，其他地址仍可登录
+  ---
+  duration_ms: 685.911333
+  type: 'test'
+  ...
+# Subtest: 地址默认阈值为八十次且禁止无效配置
+ok 21 - 地址默认阈值为八十次且禁止无效配置
+  ---
+  duration_ms: 228.295291
+  type: 'test'
+  ...
+# Subtest: 激活令牌仅存哈希、只能消费一次，密码由用户设置
+ok 22 - 激活令牌仅存哈希、只能消费一次，密码由用户设置
+  ---
+  duration_ms: 343.408125
+  type: 'test'
+  ...
+# Subtest: 一次性令牌过期或重发后失效，停用账号无法凭旧链接激活
+ok 23 - 一次性令牌过期或重发后失效，停用账号无法凭旧链接激活
+  ---
+  duration_ms: 116.4535
+  type: 'test'
+  ...
+# Subtest: 同一一次性令牌的并发消费只有一次成功
+ok 24 - 同一一次性令牌的并发消费只有一次成功
+  ---
+  duration_ms: 237.974917
+  type: 'test'
+  ...
+# Subtest: 停用、改密、重置和角色变更撤销全部现有会话
+ok 25 - 停用、改密、重置和角色变更撤销全部现有会话
+  ---
+  duration_ms: 1243.96025
+  type: 'test'
+  ...
+# Subtest: 修改密码必须知道当前密码，会话必须属于当前账号
+ok 26 - 修改密码必须知道当前密码，会话必须属于当前账号
+  ---
+  duration_ms: 450.230625
+  type: 'test'
+  ...
+# Subtest: 运维密码救援保留角色、强制下次改密并撤销全部会话与重置令牌
+ok 27 - 运维密码救援保留角色、强制下次改密并撤销全部会话与重置令牌
+  ---
+  duration_ms: 799.906333
+  type: 'test'
+  ...
+# Subtest: 最后一个启用管理员在业务层及数据库层均不能被降权或停用
+ok 28 - 最后一个启用管理员在业务层及数据库层均不能被降权或停用
+  ---
+  duration_ms: 231.689041
+  type: 'test'
+  ...
+# Subtest: 管理员权限重新从数据库读取，成员无法伪造角色管理账号
+ok 29 - 管理员权限重新从数据库读取，成员无法伪造角色管理账号
+  ---
+  duration_ms: 230.200541
+  type: 'test'
+  ...
+# Subtest: 项目成员管理按项目隔离，经理可管理本项目但不能越权其他项目
+ok 30 - 项目成员管理按项目隔离，经理可管理本项目但不能越权其他项目
+  ---
+  duration_ms: 334.857917
+  type: 'test'
+  ...
+# Subtest: 审计覆盖账号和会话操作但不记录密码、密码哈希或明文令牌
+ok 31 - 审计覆盖账号和会话操作但不记录密码、密码哈希或明文令牌
+  ---
+  duration_ms: 330.803166
+  type: 'test'
+  ...
+# Subtest: 命令行从标准输入建立管理员，不接受密码参数也不回显密码
+ok 32 - 命令行从标准输入建立管理员，不接受密码参数也不回显密码
+  ---
+  duration_ms: 322.418583
+  type: 'test'
+  ...
+# (node:30163) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 备份包含尚在预写日志中的已提交数据，且拒绝覆盖
+ok 33 - 备份包含尚在预写日志中的已提交数据，且拒绝覆盖
+  ---
+  duration_ms: 6.60375
+  type: 'test'
+  ...
+# (node:30164) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 按项目成员隔离读写，开发不能改他人任务，强制改密不能访问业务
+ok 34 - 按项目成员隔离读写，开发不能改他人任务，强制改密不能访问业务
+  ---
+  duration_ms: 7.895084
+  type: 'test'
+  ...
+# Subtest: 乐观锁冲突不覆盖，失败修改和审计一起回滚
+ok 35 - 乐观锁冲突不覆盖，失败修改和审计一起回滚
+  ---
+  duration_ms: 2.152291
+  type: 'test'
+  ...
+# Subtest: 未列入项目成员的全局管理员可分配自己，普通非成员仍被拒绝
+ok 36 - 未列入项目成员的全局管理员可分配自己，普通非成员仍被拒绝
+  ---
+  duration_ms: 2.214959
+  type: 'test'
+  ...
+# Subtest: 需求评审与排期门禁、完成验收、工时点数独立及归档恢复
+ok 37 - 需求评审与排期门禁、完成验收、工时点数独立及归档恢复
+  ---
+  duration_ms: 3.854042
+  type: 'test'
+  ...
+# Subtest: 成员管理限制、最后项目经理保护、项目归档阻止写入
+ok 38 - 成员管理限制、最后项目经理保护、项目归档阻止写入
+  ---
+  duration_ms: 2.000583
+  type: 'test'
+  ...
+# Subtest: 项目负责人拥有项目管理权限，转移负责人不暗中降权旧负责人
+ok 39 - 项目负责人拥有项目管理权限，转移负责人不暗中降权旧负责人
+  ---
+  duration_ms: 2.039208
+  type: 'test'
+  ...
+# Subtest: 项目经理能查询基本账号目录并添加新成员，只读成员看不到无关账号
+ok 40 - 项目经理能查询基本账号目录并添加新成员，只读成员看不到无关账号
+  ---
+  duration_ms: 3.186833
+  type: 'test'
+  ...
+# Subtest: 附件存数据库、跨项目下载拒绝、路径和类型及体积校验
+ok 41 - 附件存数据库、跨项目下载拒绝、路径和类型及体积校验
+  ---
+  duration_ms: 3.103417
+  type: 'test'
+  ...
+# Subtest: 真实快照精确保留3/55/79全部业务字段、6账号待激活、2附件与脱敏元数据
+ok 42 - 真实快照精确保留3/55/79全部业务字段、6账号待激活、2附件与脱敏元数据
+  ---
+  duration_ms: 9.329708
+  type: 'test'
+  ...
+# Subtest: 迁移拒绝非空库、秘密字段和悬空关联，预检不写数据库
+ok 43 - 迁移拒绝非空库、秘密字段和悬空关联，预检不写数据库
+  ---
+  duration_ms: 5.458167
+  type: 'test'
+  ...
+# (node:30165) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 数据库结构版本持久保存，拒绝降级打开未来版本
+ok 44 - 数据库结构版本持久保存，拒绝降级打开未来版本
+  ---
+  duration_ms: 7.639334
+  type: 'test'
+  ...
+# (node:30166) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 实际前端用原中文任务状态统计与筛选，项目选择在所属功能上方
+ok 45 - 实际前端用原中文任务状态统计与筛选，项目选择在所属功能上方
+  ---
+  duration_ms: 274.493333
+  type: 'test'
+  ...
+# Subtest: 团队待办排除已终止任务与归档项目，完成率明确使用非终止任务
+ok 46 - 团队待办排除已终止任务与归档项目，完成率明确使用非终止任务
+  ---
+  duration_ms: 259.761417
+  type: 'test'
+  ...
+# Subtest: 项目卡显示负责人和完成率口径，空项目不显示虚构百分比，概览不显示无效搜索
+ok 47 - 项目卡显示负责人和完成率口径，空项目不显示虚构百分比，概览不显示无效搜索
+  ---
+  duration_ms: 252.116125
+  type: 'test'
+  ...
+# Subtest: 排期页面接通周期导航、自定义日期与独立项目状态，切换项目保留排期功能
+ok 48 - 排期页面接通周期导航、自定义日期与独立项目状态，切换项目保留排期功能
+  ---
+  duration_ms: 255.968958
+  type: 'test'
+  ...
+# Subtest: 实际前端新建与编辑表单通过服务器校验并保留未修改的旧状态
+ok 49 - 实际前端新建与编辑表单通过服务器校验并保留未修改的旧状态
+  ---
+  duration_ms: 265.096667
+  type: 'test'
+  ...
+# Subtest: 实际前端读取二进制旧附件并以受限正文显示
+ok 50 - 实际前端读取二进制旧附件并以受限正文显示
+  ---
+  duration_ms: 254.659292
+  type: 'test'
+  ...
+# Subtest: 实际账号表单支持开户、停用未激活账号及重新发激活链接
+ok 51 - 实际账号表单支持开户、停用未激活账号及重新发激活链接
+  ---
+  duration_ms: 494.19
+  type: 'test'
+  ...
+# Subtest: 本人重置密码先保留一次性链接，关闭后才返回登录
+ok 52 - 本人重置密码先保留一次性链接，关闭后才返回登录
+  ---
+  duration_ms: 585.824916
+  type: 'test'
+  ...
+# Subtest: 开发人员通过实际表单流转本人需求，只修改允许字段
+ok 53 - 开发人员通过实际表单流转本人需求，只修改允许字段
+  ---
+  duration_ms: 471.634958
+  type: 'test'
+  ...
+# Subtest: 网页初始化仅在缺少管理员且携带启动入口令牌时显示，令牌不进入页面内容
+ok 54 - 网页初始化仅在缺少管理员且携带启动入口令牌时显示，令牌不进入页面内容
+  ---
+  duration_ms: 3.685125
+  type: 'test'
+  ...
+# Subtest: 没有启动令牌或初始化未启用时，网页仅显示初始化入口说明
+ok 55 - 没有启动令牌或初始化未启用时，网页仅显示初始化入口说明
+  ---
+  duration_ms: 5.2235
+  type: 'test'
+  ...
+# Subtest: 网页初始化提交六位密码后创建管理员并自动登录，沿用原管理员人员记录
+ok 56 - 网页初始化提交六位密码后创建管理员并自动登录，沿用原管理员人员记录
+  ---
+  duration_ms: 232.35025
+  type: 'test'
+  ...
+# Subtest: 初始化密码不足六位或两次不一致不会创建账号，已有管理员不会被初始化覆盖
+ok 57 - 初始化密码不足六位或两次不一致不会创建账号，已有管理员不会被初始化覆盖
+  ---
+  duration_ms: 346.072459
+  type: 'test'
+  ...
+# Subtest: 激活页、强制改密页和本人改密弹窗均使用六位最低长度
+ok 58 - 激活页、强制改密页和本人改密弹窗均使用六位最低长度
+  ---
+  duration_ms: 230.134125
+  type: 'test'
+  ...
+# Subtest: 初始化令牌错误时网页不再保留可提交表单，且不会创建管理员
+ok 59 - 初始化令牌错误时网页不再保留可提交表单，且不会创建管理员
+  ---
+  duration_ms: 2.879542
+  type: 'test'
+  ...
+# Subtest: 网页与服务器均按统一字符计数：五个补充字符不够，六个可以初始化
+ok 60 - 网页与服务器均按统一字符计数：五个补充字符不够，六个可以初始化
+  ---
+  duration_ms: 344.270667
+  type: 'test'
+  ...
+# Subtest: 管理员已创建但工作台载入失败时返回登录，保留账号和会话且不重新初始化
+ok 61 - 管理员已创建但工作台载入失败时返回登录，保留账号和会话且不重新初始化
+  ---
+  duration_ms: 345.229542
+  type: 'test'
+  ...
+# Subtest: 未登录页面提供管理员忘记密码入口和本机、服务器恢复说明
+ok 62 - 未登录页面提供管理员忘记密码入口和本机、服务器恢复说明
+  ---
+  duration_ms: 232.114083
+  type: 'test'
+  ...
+# Subtest: 管理员恢复链接在网页校验六位密码并重设真实账号，旧密码失效且新密码可登录
+ok 63 - 管理员恢复链接在网页校验六位密码并重设真实账号，旧密码失效且新密码可登录
+  ---
+  duration_ms: 577.098541
+  type: 'test'
+  ...
+# Subtest: 恢复链接的账号提示被转义，密码保存后使用后端返回的真实账号预填登录
+ok 64 - 恢复链接的账号提示被转义，密码保存后使用后端返回的真实账号预填登录
+  ---
+  duration_ms: 459.348084
+  type: 'test'
+  ...
+# Subtest: 普通一次性激活或重置链接保留原有页面和提交路径
+ok 65 - 普通一次性激活或重置链接保留原有页面和提交路径
+  ---
+  duration_ms: 469.923541
+  type: 'test'
+  ...
+# (node:30167) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 接口认证、来源校验、防跨站请求与响应脱敏
+ok 66 - 接口认证、来源校验、防跨站请求与响应脱敏
+  ---
+  duration_ms: 264.498375
+  type: 'test'
+  ...
+# Subtest: 真实服务完成项目、需求、任务、乐观锁和附件闭环
+ok 67 - 真实服务完成项目、需求、任务、乐观锁和附件闭环
+  ---
+  duration_ms: 259.471791
+  type: 'test'
+  ...
+# Subtest: 管理员开户、一次性激活、项目只读权限及停用生效
+ok 68 - 管理员开户、一次性激活、项目只读权限及停用生效
+  ---
+  duration_ms: 496.968833
+  type: 'test'
+  ...
+# (node:30168) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 本机首次启动导入真实项目，复跑保留已有编辑和管理员
+ok 69 - 本机首次启动导入真实项目，复跑保留已有编辑和管理员
+  ---
+  duration_ms: 145.149375
+  type: 'test'
+  ...
+# Subtest: 默认请求系统空闲端口，允许显式端口，仅拒绝非法数值
+ok 70 - 默认请求系统空闲端口，允许显式端口，仅拒绝非法数值
+  ---
+  duration_ms: 0.301667
+  type: 'test'
+  ...
+# Subtest: 只在显式端口被占用时回退一次；环境禁止监听不重试
+ok 71 - 只在显式端口被占用时回退一次；环境禁止监听不重试
+  ---
+  duration_ms: 0.319375
+  type: 'test'
+  ...
+# Subtest: 先获得网页端口，再向独立接口传真实来源，并只接受同实例就绪
+ok 72 - 先获得网页端口，再向独立接口传真实来源，并只接受同实例就绪
+  ---
+  duration_ms: 0.5185
+  type: 'test'
+  ...
+# Subtest: 接口显式端口冲突只回退系统分配，EPERM 立即关闭网页与子进程
+ok 73 - 接口显式端口冲突只回退系统分配，EPERM 立即关闭网页与子进程
+  ---
+  duration_ms: 0.354958
+  type: 'test'
+  ...
+# Subtest: 首次初始化令牌只传环境与浏览器片段，不记录日志或状态
+ok 74 - 首次初始化令牌只传环境与浏览器片段，不记录日志或状态
+  ---
+  duration_ms: 0.280792
+  type: 'test'
+  ...
+# Subtest: 已有管理员不生成初始化令牌、清除继承令牌且不运行账号命令
+ok 75 - 已有管理员不生成初始化令牌、清除继承令牌且不运行账号命令
+  ---
+  duration_ms: 0.094583
+  type: 'test'
+  ...
+# Subtest: 就绪超时、启动错误和异常地址均不打开浏览器并清理子进程
+ok 76 - 就绪超时、启动错误和异常地址均不打开浏览器并清理子进程
+  ---
+  duration_ms: 5.961167
+  type: 'test'
+  ...
+# Subtest: 服务就绪后子进程异常退出传播失败状态
+ok 77 - 服务就绪后子进程异常退出传播失败状态
+  ---
+  duration_ms: 0.33725
+  type: 'test'
+  ...
+# Subtest: 状态文件只有运行信息，停止旧实例不删除新实例状态
+ok 78 - 状态文件只有运行信息，停止旧实例不删除新实例状态
+  ---
+  duration_ms: 0.906417
+  type: 'test'
+  ...
+# Subtest: 独立开发入口为接口生成并传递实例编号
+ok 79 - 独立开发入口为接口生成并传递实例编号
+  ---
+  duration_ms: 0.323
+  type: 'test'
+  ...
+# Subtest: 等待网页或接口就绪期间取消时清理已启动资源
+ok 80 - 等待网页或接口就绪期间取消时清理已启动资源
+  ---
+  duration_ms: 0.27775
+  type: 'test'
+  ...
+# (node:30169) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 准备快照剔除秘密，原业务字段及附件字节保留，源文件不变且能预检导入
+ok 81 - 准备快照剔除秘密，原业务字段及附件字节保留，源文件不变且能预检导入
+  ---
+  duration_ms: 8.095125
+  type: 'test'
+  ...
+# Subtest: 拒绝覆盖既有目录或输出文件，预检不创建输出目录
+ok 82 - 拒绝覆盖既有目录或输出文件，预检不创建输出目录
+  ---
+  duration_ms: 5.210792
+  type: 'test'
+  ...
+# Subtest: 外部符号链接、未知需求关联和超限附件均拒绝且不留下输出
+ok 83 - 外部符号链接、未知需求关联和超限附件均拒绝且不留下输出
+  ---
+  duration_ms: 5.25525
+  type: 'test'
+  ...
+# Subtest: 模型地址中的凭证移除，业务正文引用真实秘密时拒绝且保留源文件
+ok 84 - 模型地址中的凭证移除，业务正文引用真实秘密时拒绝且保留源文件
+  ---
+  duration_ms: 5.697042
+  type: 'test'
+  ...
+# (node:30170) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 恢复入口读取实际运行端口及数据库，拒绝不安全地址和不完整状态
+ok 85 - 恢复入口读取实际运行端口及数据库，拒绝不安全地址和不完整状态
+  ---
+  duration_ms: 0.591792
+  type: 'test'
+  ...
+# Subtest: 仅验证同实例健康状态，不向校验请求发送恢复令牌，失败不撤销任何账号
+ok 86 - 仅验证同实例健康状态，不向校验请求发送恢复令牌，失败不撤销任何账号
+  ---
+  duration_ms: 0.715667
+  type: 'test'
+  ...
+# Subtest: 恢复入口先验证运行服务再签发，令牌只交网页片段且不在正常日志中
+ok 87 - 恢复入口先验证运行服务再签发，令牌只交网页片段且不在正常日志中
+  ---
+  duration_ms: 1.384291
+  type: 'test'
+  ...
+# Subtest: 仅显式要求打印或打开浏览器失败时展示一次性链接供本人恢复
+ok 88 - 仅显式要求打印或打开浏览器失败时展示一次性链接供本人恢复
+  ---
+  duration_ms: 0.338
+  type: 'test'
+  ...
+# Subtest: 命令行明确选择账号与站点，拒绝密码参数和重复或缺失参数
+ok 89 - 命令行明确选择账号与站点，拒绝密码参数和重复或缺失参数
+  ---
+  duration_ms: 0.17325
+  type: 'test'
+  ...
+# (node:30171) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: 初始化状态不向匿名请求暴露真实账号建议或设置凭证
+ok 90 - 初始化状态不向匿名请求暴露真实账号建议或设置凭证
+  ---
+  duration_ms: 10.702042
+  type: 'test'
+  ...
+# Subtest: 网页接受6位密码初始化原管理员并自动登录，保留原项目身份
+ok 91 - 网页接受6位密码初始化原管理员并自动登录，保留原项目身份
+  ---
+  duration_ms: 381.616709
+  type: 'test'
+  ...
+# Subtest: 初始化拒绝5位密码、跨站请求与过期入口
+ok 92 - 初始化拒绝5位密码、跨站请求与过期入口
+  ---
+  duration_ms: 3.346375
+  type: 'test'
+  ...
+# Subtest: 两个同时初始化的请求只成功一次
+ok 93 - 两个同时初始化的请求只成功一次
+  ---
+  duration_ms: 257.729875
+  type: 'test'
+  ...
+# Subtest: 读取请求正文期间完成初始化，旧请求返回已完成而非服务错误
+ok 94 - 读取请求正文期间完成初始化，旧请求返回已完成而非服务错误
+  ---
+  duration_ms: 250.373541
+  type: 'test'
+  ...
+# Subtest: 未配置初始化凭证时，网页不能抢先建立管理员
+ok 95 - 未配置初始化凭证时，网页不能抢先建立管理员
+  ---
+  duration_ms: 3.320792
+  type: 'test'
+  ...
+# Subtest: 周以周一开始，月份与季度完整覆盖跨年和闰日
+ok 96 - 周以周一开始，月份与季度完整覆盖跨年和闰日
+  ---
+  duration_ms: 1.321541
+  type: 'test'
+  ...
+# Subtest: UTC 日历算法拒绝不存在的日期，夏令时切换仍然按整天计算
+ok 97 - UTC 日历算法拒绝不存在的日期，夏令时切换仍然按整天计算
+  ---
+  duration_ms: 0.177041
+  type: 'test'
+  ...
+# Subtest: 完整项目范围综合任务、项目起止和里程碑，不受负责人筛选缩短
+ok 98 - 完整项目范围综合任务、项目起止和里程碑，不受负责人筛选缩短
+  ---
+  duration_ms: 0.212209
+  type: 'test'
+  ...
+# Subtest: 上一周期和下一周期覆盖月末、跨季度、周与自定义整段
+ok 99 - 上一周期和下一周期覆盖月末、跨季度、周与自定义整段
+  ---
+  duration_ms: 0.199375
+  type: 'test'
+  ...
+# Subtest: 自定义非法范围有明确错误，今天保留自定义跨度
+ok 100 - 自定义非法范围有明确错误，今天保留自定义跨度
+  ---
+  duration_ms: 0.105625
+  type: 'test'
+  ...
+# Subtest: 刻度自适应日周月与跨多年分组，上限有界且全范围连续覆盖
+ok 101 - 刻度自适应日周月与跨多年分组，上限有界且全范围连续覆盖
+  ---
+  duration_ms: 0.735958
+  type: 'test'
+  ...
+# Subtest: 任务条包含首尾日，在窗口两边裁剪且不伪造缺失日期
+ok 102 - 任务条包含首尾日，在窗口两边裁剪且不伪造缺失日期
+  ---
+  duration_ms: 0.211792
+  type: 'test'
+  ...
+# Subtest: 负责人和状态筛选兼容中英文状态，归档不进入排期
+ok 103 - 负责人和状态筛选兼容中英文状态，归档不进入排期
+  ---
+  duration_ms: 0.10275
+  type: 'test'
+  ...
+# Subtest: 渲染保留窗口外与未排期任务，逾期排除完成和终止，并转义用户内容
+ok 104 - 渲染保留窗口外与未排期任务，逾期排除完成和终止，并转义用户内容
+  ---
+  duration_ms: 6.670583
+  type: 'test'
+  ...
+# Subtest: 超长项目渲染只生成有限刻度，真实开始结束仍完整显示
+ok 105 - 超长项目渲染只生成有限刻度，真实开始结束仍完整显示
+  ---
+  duration_ms: 0.484292
+  type: 'test'
+  ...
+# Subtest: 搜索任务和负责人仅影响显示内容，完整项目起止不随搜索改变
+ok 106 - 搜索任务和负责人仅影响显示内容，完整项目起止不随搜索改变
+  ---
+  duration_ms: 0.400459
+  type: 'test'
+  ...
+# Subtest: 公元 1 年到 9999 年边界始终返回有效日期并禁用越界导航
+ok 107 - 公元 1 年到 9999 年边界始终返回有效日期并禁用越界导航
+  ---
+  duration_ms: 1.029875
+  type: 'test'
+  ...
+1..107
+# tests 107
+# suites 0
+# pass 107
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10364.432167
