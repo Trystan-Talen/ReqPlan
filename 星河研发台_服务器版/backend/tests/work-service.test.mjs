@@ -68,7 +68,7 @@ test('个人待办涵盖自己负责和协作的需求，结束和归档记录�
   const mine=work.snapshot(actor.dev,TODAY);
   assert.deepEqual(ids(mine.personal.tasks),[own.id]);
   assert.deepEqual(ids(mine.personal.requirements),[assigned.id,collaborating.id,owned.id].sort());
-  assert.deepEqual(mine.personal.reviews,[]);
+  assert.deepEqual(ids(mine.personal.reviews),[review.id]);  // 所有成员都可以验收他人提测的任务
   assert.deepEqual(ids(work.snapshot(actor.tester,TODAY).personal.reviews),[review.id]);
   assert.deepEqual(work.snapshot(actor.product,TODAY).personal.reviews,[]);
   assert.deepEqual(work.snapshot(actor.viewer,TODAY).personal,{tasks:[],requirements:[],reviews:[],splits:[],isLead:false});

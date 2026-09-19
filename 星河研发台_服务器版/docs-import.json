@@ -1,0 +1,24 @@
+{
+  "$comment": "npm run import:docs 的映射。root 相对本文件所在目录；同一源文件映射到多个项目时一次同步全部副本。actor 为执行导入的账号用户名，需要在目标项目中有上传权限。",
+  "root": "../../新方向",
+  "actor": "try",
+  "documents": [
+    { "file": "PRD/总PRD.md", "projects": ["p-api"], "type": "PRD", "primary": true },
+    { "glob": "PRD/模块/*.md", "projects": ["p-api"], "type": "PRD" },
+    { "glob": "PRD/验收/*.feature", "projects": ["p-api"], "type": "验收用例" },
+    { "file": "PRD/附录/计费金标准用例.md", "projects": ["p-api"], "type": "验收用例" },
+    { "file": "PRD/附录/功能盘点明细.md", "projects": ["p-api"], "type": "其他" },
+    { "file": "PRD/00-需求澄清记录.md", "projects": ["p-api"], "type": "其他" },
+    { "file": "PRD/PRD评审报告-2026-09-17.md", "projects": ["p-api"], "type": "其他" },
+    { "file": "PRD/评审问题处理状态.md", "projects": ["p-api"], "type": "其他" },
+    { "file": "星引聚合-自研底座规划.md", "projects": ["p-api"], "type": "其他" },
+
+    { "file": "PRD/模块/M8-资源同步与开源版.md", "projects": ["p-plugin"], "type": "PRD", "primary": true },
+    { "file": "PRD/模块/M0-总体设计与接口.md", "projects": ["p-plugin"], "type": "PRD" },
+    { "file": "PRD/验收/M8-资源同步与开源版.feature", "projects": ["p-plugin"], "type": "验收用例" },
+    { "file": "PRD/验收/M0-总体设计与接口.feature", "projects": ["p-plugin"], "type": "验收用例" },
+
+    { "file": "算法升级版.md", "projects": ["p-resource", "p-xingyin2"], "type": "技术方案", "primary": true },
+    { "file": "星引聚合-项目全貌.md", "projects": ["p-xingyin2"], "type": "其他" }
+  ]
+}

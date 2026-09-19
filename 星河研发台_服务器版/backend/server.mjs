@@ -144,6 +144,23 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
           return json(res,201,business.uploadAttachment(actor,id,{name:input.name,mime:input.mime,contentBuffer:Buffer.from(input.content,'base64'),logicalId:input.logicalId,expectedVersion:input.expectedVersion}));
         }
       }
+      if((match=endpoint.match(/^\/api\/projects\/([^/]+)\/documents$/))) {
+        const id=param(match[1]);
+        if(method==='GET') return json(res,200,{documents:business.listDocuments(actor,id)});
+        if(method==='POST') {
+          const input=await readJson(req);
+          if(typeof input.content!=='string'||!input.content.length||input.content.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(input.content)) throw fail(400,'INVALID_FILE','文档编码无效。');
+          const {content,...rest}=input;
+          return json(res,201,business.uploadDocument(actor,id,{...rest,contentBuffer:Buffer.from(content,'base64')}));
+        }
+      }
+      if((match=endpoint.match(/^\/api\/documents\/([^/]+)\/versions$/)) && method==='GET') return json(res,200,{versions:business.listDocumentVersions(actor,param(match[1]))});
+      if((match=endpoint.match(/^\/api\/documents\/([^/]+)\/content$/)) && method==='GET') {
+        const file=business.getDocumentContent(actor,param(match[1]),url.searchParams.has('version')?Number(url.searchParams.get('version')):undefined);
+        res.writeHead(200,{'Content-Type':(file.mime||'text/plain')+'; charset=utf-8','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(file.name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16)),'Content-Security-Policy':"sandbox; default-src 'none'",'X-Document-Version':String(file.version)});
+        return res.end(file.contentBuffer);
+      }
+      if((match=endpoint.match(/^\/api\/documents\/([^/]+)$/)) && method==='PATCH') return json(res,200,business.updateDocument(actor,param(match[1]),await readJson(req)));
       if((match=endpoint.match(/^\/api\/attachments\/([^/]+)$/)) && method==='GET') {
         const file=business.getAttachment(actor,param(match[1]),url.searchParams.has('version')?{version:Number(url.searchParams.get('version'))}:{});
         res.writeHead(200,{'Content-Type':file.mime||'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(file.name).replace(/['()*]/g,c=>'%'+c.charCodeAt(0).toString(16)),'Content-Security-Policy':"sandbox; default-src 'none'"});

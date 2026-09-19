@@ -31,13 +31,14 @@ frontend/
 │       ├── tasks.css           研发任务看板
 │       ├── members.css         项目成员、账号管理
 │       ├── work.css            我的工作、站内提醒、交付报表
-│       ├── timeline.css        交付排期（甘特图）
+│       ├── timeline.css        交付排期（甘特图）；坐标轴、网格与缩放控件也用于全局排期
+│       ├── portfolio.css       全局排期（项目概况表、跨项目甘特图、按人员泳道）
 │       ├── document.css        附件文档预览
 │       └── styleguide.css      样式指南页面自身的排版
 ├── ui-kit.js                   组件生成函数（纯函数，返回 HTML 字符串）
 ├── design-system.html/.js      活样式指南
 ├── index.html                  应用入口；引入全部样式层
-└── app.js / work-ui.js / timeline.js / …   视图与交互
+└── app.js / work-ui.js / timeline.js / portfolio.js / …   视图与交互
 ```
 
 样式层的职责边界：

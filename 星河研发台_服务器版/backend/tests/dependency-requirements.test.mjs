@@ -83,7 +83,7 @@ test('已排期需求在前置需求验收完成后才可开工，原验收角�
   dependent=move(dependent,'开发中','dev');assert.equal(dependent.status,'开发中');
   let task=b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'});b.updateTask(actor.dev,task.id,{version:task.version,status:'test'});
   dependent=move(dependent,'测试中','lead');
-  assert.throws(()=>move(dependent,'已完成','product'),error=>error.status===403&&error.code==='FORBIDDEN');
+  assert.throws(()=>move(dependent,'已完成','product'),error=>error.code==='TRANSITION_GATE');
   assert.throws(()=>move(dependent,'已完成','tester'),error=>error.code==='TRANSITION_GATE');
   assert.deepEqual(b.getRequirement(actor.viewer,dependent.id).dependencyIds,[completed.id]);
 });

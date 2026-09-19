@@ -1,0 +1,65 @@
+/* ==========================================================================
+   Page · 项目文档（列表、阅读器、需求详情中的关联文档）
+   views: documentsView / openDocument（app.js），渲染：documents-ui.js
+   预览正文沿用 document.css；这里只负责章节大纲、章节引用和验收用例卡片。
+   ========================================================================== */
+
+/* ---------- List ---------- */
+.doc-name { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.doc-name > .icon { flex: none; margin-top: 2px; color: var(--text-3); }
+.doc-name > span { min-width: 0; }
+.doc-coverage { font-variant-numeric: tabular-nums; }
+.doc-coverage.has-gap { color: var(--c-amber); font-weight: 600; }
+.doc-primary { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-width: 0; }
+.doc-primary > div, .doc-primary > strong { min-width: 0; }
+
+/* ---------- Reader (wide dialog) ---------- */
+.doc-reader { display: flex; flex-direction: column; gap: var(--space-3); }
+.doc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--text-2); }
+.doc-changed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--c-amber); }
+.doc-viewer { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
+.doc-viewer.is-single { grid-template-columns: minmax(0, 1fr); }
+.doc-outline { position: sticky; top: 0; max-height: calc(86vh - 190px); overflow: auto; padding: var(--space-3); border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
+.doc-outline h3 { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); font-size: 12px; color: var(--text-3); letter-spacing: .04em; padding: 0 var(--space-1) var(--space-2); }
+.doc-outline ol { list-style: none; display: grid; gap: 2px; }
+.doc-outline-item > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-2); width: 100%; text-align: left; padding: 5px var(--space-2); border-radius: 7px; font-size: var(--text-sm); color: var(--text-2); line-height: 1.4; }
+.doc-outline-item > button:hover { background: var(--surface-3); color: var(--text); }
+.doc-outline-item code { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.doc-outline-item em { font-style: normal; font-size: 11px; color: var(--c-amber); }
+.doc-outline-item.doc-level-3 > button { padding-left: 18px; }
+.doc-outline-item.doc-level-4 > button { padding-left: 28px; }
+.doc-outline-item.is-uncovered > button span { color: var(--text-3); }
+.doc-outline-links { display: flex; flex-wrap: wrap; gap: 2px var(--space-2); padding: 0 var(--space-2) var(--space-1) 26px; font-size: 12px; }
+.doc-outline-links .text-button { font-size: 12px; text-align: left; }
+.doc-content { min-width: 0; }
+.doc-content [data-section].is-target { scroll-margin-top: var(--space-4); outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+
+/* ---------- Acceptance cases (.feature) ---------- */
+.feature-body { max-width: none; }
+.feature-intro { white-space: pre-wrap; }
+.feature-scenario { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.feature-scenario header { display: flex; align-items: baseline; gap: var(--space-3); padding: 10px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.feature-scenario header code { flex: none; font-family: var(--font-mono); font-size: 12px; color: var(--accent); background: none; padding: 0; }
+.feature-tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.feature-scenario pre { border-radius: 0; background: none; color: var(--text-2); white-space: pre-wrap; }
+
+/* ---------- Requirement drawer: linked documents ---------- */
+.doc-refs { display: grid; gap: 10px; }
+.doc-ref { padding: var(--space-3) 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); display: grid; gap: var(--space-2); }
+.doc-ref.is-missing { display: flex; align-items: center; gap: var(--space-2); color: var(--text-2); }
+.doc-ref-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.doc-ref-head > .icon { color: var(--text-3); }
+.doc-ref-actions { display: inline-flex; gap: var(--space-3); margin-left: auto; }
+.doc-actions { display: flex; flex: none; gap: var(--space-2); }
+.doc-row-actions { white-space: nowrap; text-align: right; }
+.doc-row-actions .text-button + .text-button { margin-left: var(--space-3); }
+.doc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.doc-chip { padding: 2px var(--space-2); border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface); font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); transition: border-color var(--duration-fast), color var(--duration-fast); }
+.doc-chip:hover { border-color: var(--accent); color: var(--accent); }
+.doc-chip.is-changed { border-color: var(--c-amber); color: var(--c-amber); background: var(--c-amber-bg); }
+
+@media (max-width: 900px) {
+  .doc-viewer { grid-template-columns: minmax(0, 1fr); }
+  .doc-outline { position: static; max-height: 260px; }
+  .doc-primary { flex-direction: column; align-items: flex-start; }
+}

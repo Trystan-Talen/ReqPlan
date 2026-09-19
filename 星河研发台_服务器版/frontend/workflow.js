@@ -8,12 +8,15 @@ export const taskStage = status => ({ '待开始': 'wait', '开发中': 'develop
 export const PROJECT_ROLES = Object.freeze(['product', 'lead', 'developer', 'tester', 'viewer']);
 export const ROLE_LABELS = Object.freeze({ product: '产品经理', lead: '主开发', developer: '开发', tester: '测试', viewer: '观察者' });
 export const OWNER_ROLES = Object.freeze(['product', 'lead']);
+// Everyone who works on a project may test: accept or send back tasks and requirements under test.
+export const REVIEW_ROLES = Object.freeze(['product', 'lead', 'developer', 'tester']);
 const PERMISSIONS = Object.freeze({
   editRequirement: ['product'],        // create, edit content, archive, upload documents
   planRequirement: ['product', 'lead'], // plan dates, batch reschedule
   assignTasks: ['lead'],                // choose the lead developer, split, assign, terminate and archive tasks
   createOwnTask: ['lead', 'developer'], // add a task owned by oneself under a requirement one takes part in
-  reviewTask: ['lead', 'tester'],       // confirm or reopen finished tasks
+  reviewTask: REVIEW_ROLES,             // confirm or reopen finished tasks
+  reviewRequirement: REVIEW_ROLES,      // accept or send back requirements under test
   uploadDocument: ['product', 'lead'],
 });
 export function roleCan(role, permission) { return role === 'admin' || (PERMISSIONS[permission] || []).includes(role); }
@@ -24,12 +27,12 @@ const REQUIREMENT_RULES = Object.freeze({
   '未确定>待评审': ['product'], '待评审>未确定': ['product'], '待评审>已确定': ['product'], '已确定>待评审': ['product'],
   '已确定>待排期': ['lead'], '已确定>已排期': ['product', 'lead'], '待排期>已排期': ['product', 'lead'], '待排期>已确定': ['product', 'lead'], '待排期>待评审': ['product'],
   '已排期>已确定': ['product', 'lead'], '已排期>开发中': ['lead', 'developer'], '开发中>已排期': ['lead'], '开发中>测试中': ['lead', 'developer'],
-  '测试中>开发中': ['tester'], '测试中>已完成': ['tester'], '已完成>开发中': ['product', 'tester'], '已终止>未确定': ['product'],
+  '测试中>开发中': REVIEW_ROLES, '测试中>已完成': REVIEW_ROLES, '已完成>开发中': REVIEW_ROLES, '已终止>未确定': ['product'],
 });
 const REQUIREMENT_REASON = new Set(['测试中>开发中', '已完成>开发中']);
 const TASK_RULES = Object.freeze({
   'wait>develop': ['lead', 'developer'], 'develop>wait': ['lead', 'developer'], 'develop>test': ['lead', 'developer'],
-  'test>develop': ['lead', 'developer', 'tester'], 'test>done': ['lead', 'tester'], 'done>develop': ['lead', 'tester'],
+  'test>develop': REVIEW_ROLES, 'test>done': REVIEW_ROLES, 'done>develop': REVIEW_ROLES,
   'wait>terminated': ['lead'], 'develop>terminated': ['lead'], 'test>terminated': ['lead'], 'terminated>wait': ['lead'],
 });
 const WRITERS = ['admin', 'product', 'lead', 'developer', 'tester'];
@@ -71,23 +74,25 @@ export function availableRequirementActions(role, requirement, { tasks = [], dep
   }).filter(item => item.code !== 'FORBIDDEN');
 }
 
-export function checkTaskTransition(role, previousStatus, nextStatus, { reason = '', dependencies = [] } = {}) {
+// ownTask: the actor owns the task. Only the lead developer may confirm their own work (pure technical tasks).
+export function checkTaskTransition(role, previousStatus, nextStatus, { reason = '', dependencies = [], ownTask = false } = {}) {
   if (!WRITERS.includes(role)) return rejected(403, '当前项目角色无权执行此操作', 'FORBIDDEN');
   const previous = taskStage(previousStatus), next = taskStage(nextStatus);
   if (previous === next) return accepted();
   const roles = TASK_RULES[`${previous}>${next}`];
   if (!roles) return rejected(409, '不能跳过任务流程', 'STATE_TRANSITION');
-  if (next === 'done' && !allows(roles, role)) return rejected(403, '验收任务需要测试或主开发', 'FORBIDDEN');
+  if (next === 'done' && !allows(roles, role)) return rejected(403, '验收任务需要项目成员（观察者只读）', 'FORBIDDEN');
+  if (next === 'done' && ownTask && !['lead', 'admin'].includes(role)) return rejected(403, '不能验收自己负责的任务，请其他成员验收', 'FORBIDDEN');
   if (next === 'terminated' && (!allows(roles, role) || !hasText(reason))) return rejected(403, '终止任务需要主开发并填写原因', 'FORBIDDEN');
   if (!allows(roles, role)) return rejected(403, `此流转需要${ROLE_NAMES(roles)}`, 'FORBIDDEN');
   if (next === 'develop' && dependencies.some(task => !task || task.archived || taskStage(task.status) !== 'done')) return rejected(409, '前置任务尚未完成，不能开始开发', 'DEPENDENCY_GATE');
   return accepted();
 }
 
-export function availableTaskStatuses(role, currentStatus, { dependencies = [] } = {}) {
+export function availableTaskStatuses(role, currentStatus, { dependencies = [], ownTask = false } = {}) {
   const current = taskStage(currentStatus || 'wait');
   const targets = Object.keys(TASK_RULES).filter(key => key.startsWith(current + '>')).map(key => key.split('>')[1]);
-  return [current, ...targets.filter(status => checkTaskTransition(role, current, status, { reason: '待填写', dependencies }).ok)];
+  return [current, ...targets.filter(status => checkTaskTransition(role, current, status, { reason: '待填写', dependencies, ownTask }).ok)];
 }
 
 export function taskGranularity(hours) {

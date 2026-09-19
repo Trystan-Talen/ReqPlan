@@ -39,7 +39,7 @@ export class Store {
 export class Client {
   constructor({url,profile='default',store=new Store(),fetchImpl=fetch}) { Object.assign(this,{url:normalizeUrl(url),profile,store,fetchImpl}); }
   async request(endpoint,{method='GET',body,authenticated=true}={}) {
-    const headers={Accept:'application/json','User-Agent':'xinghe-cli/0.1.0'};
+    const headers={Accept:'application/json','User-Agent':'xinghe-cli/0.3.0'};
     if(body!==undefined) headers['Content-Type']='application/json';
     if(authenticated) {
       const s=await this.store.session(this.profile,this.url);
@@ -60,6 +60,24 @@ export class Client {
       fail(data.code || 'HTTP_ERROR',data.error || '平台请求失败。',{status:response.status,requestId:data.requestId});
     }
     return {data,response};
+  }
+  // Document content is returned as a file, not JSON.
+  async download(endpoint) {
+    const s=await this.store.session(this.profile,this.url);
+    if(!s || s.url!==this.url || !Number.isFinite(Date.parse(s.expiresAt)) || Date.parse(s.expiresAt)<=Date.now()) fail('LOGIN_REQUIRED','此环境尚未登录或会话已过期，请执行 auth login（账号登录）。');
+    if(!/^xinghe_session=[A-Za-z0-9_-]+$/.test(s.cookie)) fail('INVALID_SESSION','本地登录凭证无效，请重新登录。');
+    let response;
+    try { response=await this.fetchImpl(this.url+endpoint,{method:'GET',headers:{Accept:'*/*','User-Agent':'xinghe-cli/0.3.0',Cookie:s.cookie},redirect:'manual',signal:AbortSignal.timeout(20_000)}); }
+    catch { fail('NETWORK_ERROR','无法连接平台，请检查地址及服务状态。'); }
+    if(response.status>=300 && response.status<400) fail('REDIRECT_BLOCKED','平台返回重定向；请配置最终地址。凭证不会转发到其他地址。');
+    if(!response.ok) {
+      let data={};try {data=await response.json();} catch {}
+      if(response.status===401) await this.store.clearSession(this.profile,this.url);
+      fail(data.code || 'HTTP_ERROR',data.error || '文档下载失败。',{status:response.status,requestId:data.requestId});
+    }
+    const disposition=response.headers.get('content-disposition') || '',encoded=disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1];
+    let name='';try {name=encoded?decodeURIComponent(encoded):'';} catch {}
+    return {name,version:Number(response.headers.get('x-document-version')) || null,mime:(response.headers.get('content-type') || '').split(';')[0],content:Buffer.from(await response.arrayBuffer())};
   }
   async login(username,password) {
     const {data,response}=await this.request('/api/auth/login',{method:'POST',body:{username,password},authenticated:false});

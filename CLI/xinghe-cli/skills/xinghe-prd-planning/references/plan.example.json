@@ -1,0 +1,20 @@
+{
+  "$comment": "requirement 填 requirement import 输出的真实需求编号；owner 可填用户名、成员编号或 owners 里的别名。示例中的编号和日期都要替换。",
+  "startDate": "2026-09-21",
+  "capacityHours": 7,
+  "capacityOverrides": [{ "from": "2026-09-21", "until": "2026-10-09", "hours": 8 }],
+  "holidays": ["2026-11-09"],
+  "extraWorkdays": [],
+  "acceptanceBufferDays": 1,
+  "phases": ["N0", "N1", "N2", "N3", "N4", "cut"],
+  "phaseDeadlines": { "N0": "2026-09-29", "N1": "2026-10-16", "N2": "2026-10-30", "N3": "2026-11-13", "N4": "2026-12-04" },
+  "respectExistingLoad": true,
+  "owners": { "A": "yanp", "B": "zeng", "C": "wu-dev" },
+  "tasks": [
+    { "requirement": "r-实际编号", "owner": "A", "phase": "N0", "hours": 12, "title": "适配层 A/B 验证并出选型报告", "desc": "带截止日的交付物，9/25 前给出报告。" },
+    { "requirement": "r-实际编号", "owner": "A", "phase": "N1", "hours": 24, "title": "统一内部格式、OpenAI Chat 流式 / 非流式与错误码矩阵", "desc": "GW-2、GW-3.1、GW-4；GW-AC-01、08。" },
+    { "requirement": "r-实际编号", "owner": "A", "phase": "N1", "hours": 24, "title": "Responses（含有状态请求）与 Anthropic Messages 协议", "desc": "GW-3.2、GW-3.9。", "after": ["统一内部格式、OpenAI Chat 流式 / 非流式与错误码矩阵"] },
+    { "requirement": "r-实际编号", "owner": "C", "phase": "N2", "hours": 22, "title": "控制台框架、概览与 Key 管理界面", "desc": "UI-1、UI-3.1、KEY-6。" },
+    { "requirement": "r-视频需求编号", "owner": "A", "phase": "cut", "hours": 24, "title": "视频生成、统一任务接口与视频计费", "desc": "预设可砍项，排在最后。" }
+  ]
+}

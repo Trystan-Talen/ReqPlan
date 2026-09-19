@@ -1,0 +1,25 @@
+[
+  {
+    "key": "gateway",
+    "title": "文本协议网关",
+    "description": "OpenAI Chat / Responses、Anthropic Messages、Gemini 四个文本协议的流式与非流式调用，含协议转换、请求头、超时、模型列表与错误映射。\n\n覆盖的 PRD 章节：\nM1-网关与调用.md\n· 〔GW-2〕对外接口（N1 · 10-16）\n· 〔GW-3.1〕请求处理（N1 · 10-16）\n· 〔GW-3.5a〕请求大小限制（N2 · 10-30）\n\n交付节点：N1（10-16）、N2（10-30）",
+    "acceptance": "按以下 3 条验收用例逐条验收：\nM1-网关与调用.feature\n· GW-AC-01 Chat 流式（N1）\n· GW-AC-08 首 Token 前失败（N1）\n· GW-AC-12 Embeddings（N2）",
+    "priority": "P0",
+    "source": "PRD M1〔GW-2、GW-3〕",
+    "docRefs": [
+      { "document": "M1-网关与调用.md", "type": "PRD", "sections": ["GW-2", "GW-3.1", "GW-3.5a"] },
+      { "document": "M1-网关与调用.feature", "type": "验收用例", "sections": ["GW-2", "GW-3.1"] }
+    ],
+    "acceptanceCases": ["GW-AC-01", "GW-AC-08", "GW-AC-12"]
+  },
+  {
+    "key": "video",
+    "title": "视频生成与异步任务",
+    "description": "视频生成（统一任务接口）。预设可砍项，11/6 决定去留。\n\n覆盖的 PRD 章节：\nM1-网关与调用.md\n· 〔GW-3.7〕视频与异步任务（N3 · 11-13）",
+    "acceptance": "按以下 1 条验收用例逐条验收：\nM1-网关与调用.feature\n· GW-AC-15 视频任务（N3）",
+    "priority": "P2",
+    "source": "PRD M1〔GW-3.7〕",
+    "docRefs": [{ "document": "M1-网关与调用.md", "type": "PRD", "sections": ["GW-3.7"] }],
+    "acceptanceCases": ["GW-AC-15"]
+  }
+]

@@ -1,0 +1,7 @@
+# 宿主机 HTTPS 网关示例（Caddy 会自动申请并续期证书）。
+# 把域名改成 .env 中 PUBLIC_ORIGIN 的主机名，放到 /etc/caddy/Caddyfile 后执行 sudo systemctl reload caddy。
+# Caddy 默认把真实客户端地址写入 X-Forwarded-For，网页容器会据此识别来源地址。
+projects.example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+}

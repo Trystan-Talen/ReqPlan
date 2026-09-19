@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { transaction } from './database.mjs';
 import { taskStage } from '../frontend/workflow.js';
+import { affectedSections } from '../frontend/doc-sections.js';
 
 const DAY = 86400000;
 function day(value) {
@@ -30,11 +31,11 @@ export function summarizeWork(data,user,date) {
   const requirements=data.requirements.filter(item=>active(item)&&projectIds.has(item.projectId));
   const roles=new Map(data.memberships.filter(item=>item.userId===user.id).map(item=>[item.projectId,item.role]));
   const manager=id=>user.role==='admin'||roles.get(id)==='lead';
-  const reviewer=id=>user.role==='admin'||['lead','tester'].includes(roles.get(id));
+  const reviewer=id=>user.role==='admin'||['product','lead','developer','tester'].includes(roles.get(id));
   const lead=id=>roles.get(id)==='lead';
   const assignedTasks=tasks.filter(item=>item.ownerId===user.id&&!finished(item));
   const assignedRequirements=requirements.filter(item=>!finished(item)&&(item.ownerId===user.id||item.assigneeId===user.id||(item.collaboratorIds||[]).includes(user.id)));
-  const reviews=tasks.filter(item=>taskStage(item.status)==='test'&&reviewer(item.projectId));
+  const reviews=tasks.filter(item=>taskStage(item.status)==='test'&&item.ownerId!==user.id&&reviewer(item.projectId));
   const taskById=new Map(tasks.map(item=>[item.id,item]));
   const reminders=[];
   for(const task of tasks) {
@@ -52,7 +53,21 @@ export function summarizeWork(data,user,date) {
   for(const item of splits)reminders.push({id:noticeId(`split:${item.id}`),kind:'split',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:'需求已确定，等待拆分任务并指定主责开发',date:item.planStart||''});
   const developerIds=new Set(data.memberships.filter(item=>item.role==='developer').map(item=>`${item.projectId}:${item.userId}`));
   for(const task of tasks)if(lead(task.projectId)&&developerIds.has(`${task.projectId}:${task.createdBy}`)&&taskStage(task.status)==='wait')reminders.push({id:noticeId(`added:${task.id}`),kind:'added',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:'开发补充了这个任务，请确认拆分和排期',date:task.dueDate||''});
-  for(const task of reviews)reminders.push({id:noticeId(`review:${task.id}:${task.version}`),kind:'review',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:'任务已进入测试，等待验收',date:task.dueDate||''});
+  // Anyone may test, but only lead developers and testers are nudged, so reminders stay quiet for the rest.
+  const nudged=id=>user.role==='admin'||['lead','tester'].includes(roles.get(id));
+  for(const task of reviews.filter(item=>nudged(item.projectId)))reminders.push({id:noticeId(`review:${task.id}:${task.version}`),kind:'review',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:'任务已进入测试，等待验收',date:task.dueDate||''});
+  // A new document version that changes sections a requirement references notifies its lead
+  // developer, the project's lead developers and testers for 7 days while the requirement is open.
+  for(const document of data.documents||[]) {
+    const changedAt=day(document.versionCreatedAt);
+    if(document.version<2||!document.changedSections?.length||changedAt===null||changedAt<today-7*DAY)continue;
+    for(const item of requirements) {
+      if(item.projectId!==document.projectId||['已完成','已终止'].includes(item.status))continue;
+      if(!(item.assigneeId===user.id||['lead','tester'].includes(roles.get(item.projectId))))continue;
+      const sections=affectedSections(item,document);
+      if(sections.length)reminders.push({id:noticeId(`document:${document.id}:${document.version}:${item.id}`),kind:'document',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:`《${document.title}》v${document.version} 修改了关联章节 ${sections.slice(0,6).join('、')}${sections.length>6?' 等':''}`,date:document.versionCreatedAt.slice(0,10)});
+    }
+  }
   const monday=today-((new Date(today).getUTCDay()+6)%7)*DAY;
   const trend=Array.from({length:8},(_,index)=>({start:iso(monday-(7-index)*7*DAY),end:iso(monday-(7-index)*7*DAY+6*DAY),createdRequirements:0,completedTasks:0}));
   let undatedCompleted=0;

@@ -54,6 +54,6 @@ test('支持第一版备份在隔离副本升级新增附件补录表，原备�
   const db=new DatabaseSync(f.snapshot);db.exec('DROP TABLE attachment_imports;PRAGMA user_version=1;');db.close();
   const original=fs.readFileSync(f.snapshot);
   const result=await checkRestore(f.snapshot,{temporaryRoot:f.dir});
-  assert.equal(result.schemaVersion,3);assert.equal(result.counts.attachment_imports,0);assert.equal(result.counts.attachments,1);
+  assert.equal(result.schemaVersion,4);assert.equal(result.counts.attachment_imports,0);assert.equal(result.counts.documents,0);assert.equal(result.counts.attachments,1);
   assert.deepEqual(fs.readFileSync(f.snapshot),original);
 });

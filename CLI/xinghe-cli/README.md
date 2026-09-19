@@ -88,7 +88,63 @@ xinghe schedule list --project p-exec --from 2026-09-01 --to 2026-12-31 --profil
 
 `--hours`（估算工时）仅限任务；`--version`（记录版本号）必须使用刚查询的实际值，示例中的 1 不是固定值。被他人修改后，后端会拒绝旧版本；工具不会自动刷新版本后强行覆盖。需求排期使用 `requirement schedule`（调整需求排期），日期字段会映射为需求的计划日期。
 
-`schedule list`（排期查询）按日期区间相交返回任务，日期缺失或反向的记录单列。没有固定两周限制。本版不提供批量原子提交、人员负荷计算、依赖关系推算或自动排程。复杂更新使用 `update`（修改）配合数据文件。
+`schedule list`（排期查询）按日期区间相交返回任务，日期缺失或反向的记录单列；加 `--kind requirement` 改为查询需求的计划日期，不带 `--project` 时查询全部可见项目。复杂更新使用 `update`（修改）配合数据文件。
+
+### 按平台流程拆分与排期（0.2）
+
+平台的流程是：产品经理录入需求（未确定 → 待评审 → 已确定）→ 主开发拆分任务并指定主责开发 → 需求进入已排期。`xinghe schema` 列出需求与任务的全部状态和角色规则。
+
+```sh
+# 主开发批量拆分：整包校验，要么全部创建要么不创建
+xinghe task batch --requirement r-实际编号 --version 需求当前版本 --data-file tasks.json --profile local
+```
+
+`tasks.json`（任务数组）每项字段同 `task create`，例如 `[{"title":"实现导出接口","ownerId":"u-成员编号","estimateHours":8,"startDate":"2026-09-21","dueDate":"2026-09-22"}]`。命令输出 `requestId`（提交编号）；网络中断时用同一个 `--request-id` 重试，平台返回首次结果，不会重复创建。
+
+```sh
+# 需求批量改期：先预览，再用同一文件和预览令牌提交
+xinghe schedule preview --project p-实际编号 --data-file changes.json --profile local
+xinghe schedule apply --project p-实际编号 --data-file changes.json --token 预览令牌 --reason "改期原因" --profile local
+```
+
+`changes.json` 每项为 `{"requirementId":"…","version":当前版本,"planStart":"YYYY-MM-DD","planEnd":"YYYY-MM-DD"}`。计划超出项目目标日期时预览会提示，确认后 `apply` 加 `--force`。
+
+归档与恢复：`requirement archive|restore <编号> --version <版本号>`、`task archive|restore …`。个人待办与站内提醒：`xinghe work`。
+
+### 项目文档
+
+```sh
+xinghe document list --project p-实际编号 --profile local
+xinghe document versions d-实际编号 --profile local
+xinghe document download d-实际编号 --profile local                 # 内容直接输出在 data.content
+xinghe document download d-实际编号 --doc-version 1 --output prd-v1.md --profile local
+xinghe document upload --project p-实际编号 --file PRD.md --type PRD --note "评审后修订" --profile local
+xinghe document upload --project p-实际编号 --document d-实际编号 --file PRD.md --note "补充重试规则" --profile local
+```
+
+文档支持 Markdown、文本、`.feature`、HTML 和 JSON，UTF-8 编码，单个不超过 2 兆字节。`--output` 不会覆盖已有文件。上传新版本时带 `--document`，工具会先查询当前版本号，别人刚上传过新版本时平台拒绝，避免覆盖。需求详情（`requirement get`）中的 `docRefs` 给出关联的文档与章节编号。
+
+## 从 PRD 拆需求、任务并排期（0.3）
+
+`skills/xinghe-prd-planning/SKILL.md` 是给助手用的技能：把 PRD 文档体系交给助手，它会用本工具上传文档、拆出需求并按章节关联、拆 2～3 天粒度的研发任务、按工作日历与人员产能排期，关键决策点先问你。安装到 Claude Code：
+
+```sh
+mkdir -p ~/.claude/skills && cp -R skills/xinghe-prd-planning ~/.claude/skills/
+```
+
+其他助手按各自的技能目录放置同一文件夹即可。技能用到的两个命令：
+
+```sh
+# 批量导入需求：按标题去重可安全重跑；检查 docRefs 引用的文档章节和验收用例是否存在
+xinghe requirement import --project p-实际编号 --data-file reqs.json --dry-run --profile local
+xinghe requirement import --project p-实际编号 --data-file reqs.json --profile local
+
+# 自动排期：按阶段与顺序把任务放进每个人的工作日历，默认接在其已有未完成任务之后
+xinghe plan preview --project p-实际编号 --data-file plan.json --profile local
+xinghe plan apply --project p-实际编号 --data-file plan.json --profile local   # 主开发或管理员账号；超期需 --force
+```
+
+计划文件与需求文件的完整示例见 `skills/xinghe-prd-planning/references/`。`plan apply` 为每条需求批量建任务、设置主责开发与协作人、写入计划日期（加 1 个工作日验收缓冲）并把「已确定」流转为「已排期」；已有其他任务的需求跳过，重跑同一计划不会重复创建。需求的 `docRefs`（关联文档章节）与 `acceptanceCases`（验收用例）需要平台服务端为本版本或更新版本。
 
 ## 登录凭证与输出
 
@@ -107,4 +163,4 @@ npm test
 npm pack
 ```
 
-源码中的测试复用相邻服务器项目的真实业务及请求处理逻辑，使用内存数据库；不修改现有业务数据库，不占用端口。分发包仅包含命令入口、源代码和说明，不包含登录凭证、服务器数据库、测试或原始项目数据。尚未发布到公共软件仓库。
+源码中的测试复用相邻服务器项目（`../../星河研发台_服务器版`，或 `XINGHE_SERVER_ROOT` 指定）的真实业务及请求处理逻辑，使用内存数据库；不修改现有业务数据库，不占用端口。服务器升级后先在这里跑 `npm test`，确认命令仍与后端接口一致。分发包仅包含命令入口、源代码和说明，不包含登录凭证、服务器数据库、测试或原始项目数据。尚未发布到公共软件仓库。

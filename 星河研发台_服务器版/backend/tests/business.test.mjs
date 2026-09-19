@@ -127,12 +127,12 @@ test('需求评审、拆分、排期门禁，提测与验收按角色流转，�
   r=b.updateRequirement(actor.dev,r.id,{version:r.version,status:'测试中'});
   assert.throws(()=>b.updateRequirement(actor.admin,r.id,{version:r.version,status:'已完成'}),error=>error.code==='TRANSITION_GATE');
   assert.throws(()=>b.updateRequirement(actor.tester,r.id,{version:r.version,status:'开发中'}),status(400));
-  assert.throws(()=>b.updateTask(actor.dev,task.id,{version:task.version,status:'done'}),status(403));
+  assert.throws(()=>b.updateTask(actor.dev,task.id,{version:task.version,status:'done'}),status(403));  // 不能验收自己负责的任务
   assert.throws(()=>b.updateTask(actor.tester,task.id,{version:task.version,title:'测试不能改他人正文',status:'done'}),status(403));
   task=b.updateTask(actor.tester,task.id,{version:task.version,status:'done'});
   assert(task.completedAt); assert.equal(task.estimateHours,16); assert.equal(task.estimatePoints,3);
-  assert.throws(()=>b.updateRequirement(actor.product,r.id,{version:r.version,status:'已完成'}),status(403));
-  r=b.updateRequirement(actor.tester,r.id,{version:r.version,status:'已完成'});
+  assert.throws(()=>b.updateRequirement(actor.viewer,r.id,{version:r.version,status:'已完成'}),status(403));
+  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'已完成'});  // 所有成员都可以验收需求
   assert.throws(()=>b.archiveRequirement(actor.lead,r.id,{version:r.version}),status(403));
   r=b.archiveRequirement(actor.product,r.id,{version:r.version});
   assert.equal(b.getTask(actor.dev,task.id).archived,true);

@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { PROJECT_ROLES } from '../frontend/workflow.js';
 
 const NOW = "(strftime('%Y-%m-%dT%H:%M:%fZ','now'))";
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 export const ROLE_MIGRATION_KEY = 'role_migration_v3';
 const MEMBERSHIPS_TABLE = name => `CREATE TABLE ${name} (
         project_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id),
@@ -195,6 +195,22 @@ export function openDatabase(path) {
       END;
     `);
     if (schemaVersion < 3) migrateToVersion3(db);
+    // Version 4: project documents (PRD, prototypes, specs, acceptance cases) with full version history.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS documents (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, title TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('PRD','原型','技术方案','验收用例','其他')), is_primary INTEGER NOT NULL DEFAULT 0 CHECK(is_primary IN (0,1)),
+        created_at TEXT NOT NULL DEFAULT ${NOW}, updated_at TEXT NOT NULL DEFAULT ${NOW}, UNIQUE(project_id,name)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS document_versions (
+        id TEXT PRIMARY KEY, document_id TEXT NOT NULL REFERENCES documents(id), version INTEGER NOT NULL CHECK(version > 0),
+        mime TEXT NOT NULL, content BLOB NOT NULL, content_hash TEXT NOT NULL,
+        sections TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(sections)), changed_sections TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(changed_sections)),
+        note TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'upload', created_at TEXT NOT NULL DEFAULT ${NOW}, created_by TEXT REFERENCES users(id),
+        UNIQUE(document_id,version)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS documents_project ON documents(project_id);
+    `);
     db.exec(`PRAGMA user_version=${SCHEMA_VERSION}; COMMIT;`);
     return db;
   } catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); db.close(); throw error; }

@@ -1,12 +1,23 @@
 {
   "name": "xinghe-cli",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "星河研发台命令行工具",
   "type": "module",
-  "bin": { "xinghe": "bin/xinghe.mjs" },
-  "engines": { "node": ">=22.23.0" },
-  "files": ["bin", "src", "README.md"],
-  "scripts": { "test": "node --test test/*.test.mjs" },
+  "bin": {
+    "xinghe": "bin/xinghe.mjs"
+  },
+  "engines": {
+    "node": ">=22.23.0"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
   "license": "UNLICENSED",
   "private": true
 }

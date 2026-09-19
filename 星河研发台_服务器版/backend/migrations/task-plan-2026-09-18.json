@@ -1,0 +1,1054 @@
+{
+  "$comment": "2026-09-18 研发任务拆分与排期计划。分工依据《星引聚合-自研底座规划》§5：yanp = 工程师 A 网关与路由，zeng = 工程师 B 账务与平台，wu-dev = 工程师 C 前端。优先级（用户确认）：资源管理平台 1.0 与星引聚合 2.0（10/9 交付）优先，自研 API 平台 N0/N1 顺延。phase 决定排队顺序：N0 < S（10/9 冲刺）< N1 < N2 < N3 < N4 < N3cut（预设可砍项：视频 11/6、阿拉伯文 11/13 决定去留，排在最后，砍掉时不影响其他任务）。日期由 npm run plan:tasks 按新加坡工作日（11/9 屠妖节补假）与每人每天 capacityHours 小时自动计算。",
+  "startDate": "2026-09-21",
+  "capacityHours": 7,
+  "holidays": [
+    "2026-11-09"
+  ],
+  "acceptanceBufferDays": 1,
+  "owners": {
+    "A": "yanp",
+    "B": "zeng",
+    "C": "wu-dev"
+  },
+  "tasks": [
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N0",
+      "hours": 12,
+      "title": "适配层 A/B 验证（Bifrost 嵌入 vs 自研适配器）并出报告",
+      "desc": "同一组用例分别跑两种方案，9/25 前给出选型报告（规划 §4）。"
+    },
+    {
+      "req": "r-res-01",
+      "owner": "B",
+      "phase": "N0",
+      "hours": 6,
+      "title": "同步接口契约草案：增量下发、对齐、全量拉取、凭证加密",
+      "desc": "算法升级版 §16.2；9/29 N0 与自研 API 平台定稿。"
+    },
+    {
+      "req": "r-api-22",
+      "owner": "C",
+      "phase": "N0",
+      "hours": 8,
+      "title": "单仓、CI 流水线与测试环境",
+      "desc": "NFR-11；N0 要求仓库、CI、测试环境可用。"
+    },
+    {
+      "req": "r-api-01",
+      "owner": "A",
+      "phase": "N0",
+      "hours": 6,
+      "title": "五个接口契约评审定稿（与资源平台对齐）",
+      "desc": "ARC-4.1–4.5；以资源平台契约草案为输入，9/29 定稿。",
+      "after": [
+        "同步接口契约草案：增量下发、对齐、全量拉取、凭证加密"
+      ]
+    },
+    {
+      "req": "r-agg-01",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "快照接收与整版原子替换（只保留最大 snapshot_seq）",
+      "desc": "算法升级版 §9、§9.1；缺失资源本周期不可选。"
+    },
+    {
+      "req": "r-agg-01",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "缓存目录模式与重启冷加载",
+      "desc": "快照超过 3 分钟未更新进入缓存目录模式；重启后 30 秒内不误判（§9.2）。"
+    },
+    {
+      "req": "r-agg-01",
+      "owner": "A",
+      "phase": "S",
+      "hours": 4,
+      "title": "快照消费场景联调：§15 #30–#33",
+      "desc": "按 §13 配置主表取参数。"
+    },
+    {
+      "req": "r-agg-02",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "缓存亲和：连续会话沿用上一资源",
+      "desc": "§10.0、§10.1。"
+    },
+    {
+      "req": "r-agg-02",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "档位过滤与按 score 排序",
+      "desc": "P ≤ G 且 Q ≥ Q_G 且 state=热（§10.2、§10.3）。"
+    },
+    {
+      "req": "r-agg-02",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "流量池 7 : 2.5 : 0.5 分配与 #4 顺延兜底",
+      "desc": "§10.4、§12。"
+    },
+    {
+      "req": "r-agg-02",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "选路场景联调：§15 #9、#11、#19–#22、#36"
+    },
+    {
+      "req": "r-agg-03",
+      "owner": "A",
+      "phase": "S",
+      "hours": 8,
+      "title": "本机熔断与 30 秒半开探测，连败 5 次上报",
+      "desc": "§5.5、§7.3。"
+    },
+    {
+      "req": "r-agg-03",
+      "owner": "A",
+      "phase": "S",
+      "hours": 8,
+      "title": "EWMA 降权（按资源 Q 的触发线，失败轴优先）",
+      "desc": "§10.5。"
+    },
+    {
+      "req": "r-agg-03",
+      "owner": "A",
+      "phase": "S",
+      "hours": 6,
+      "title": "熔断降权场景联调：§15 #1–#6、#12、#37–#39"
+    },
+    {
+      "req": "r-agg-04",
+      "owner": "A",
+      "phase": "S",
+      "hours": 4,
+      "title": "单请求最多 3 个实例、总预算 60 秒",
+      "desc": "§11。"
+    },
+    {
+      "req": "r-agg-04",
+      "owner": "A",
+      "phase": "S",
+      "hours": 8,
+      "title": "遥测上报（探测与半开单独标记）与路由决策记录",
+      "desc": "§16.3、§16.4。"
+    },
+    {
+      "req": "r-agg-04",
+      "owner": "A",
+      "phase": "S",
+      "hours": 4,
+      "title": "重试与遥测场景联调：§15 #22、#23、#35、#39"
+    },
+    {
+      "req": "r-agg-05",
+      "owner": "C",
+      "phase": "S",
+      "hours": 4,
+      "title": "管理端路由状态接口：快照字段与本机熔断 / 降权状态"
+    },
+    {
+      "req": "r-agg-05",
+      "owner": "C",
+      "phase": "S",
+      "hours": 10,
+      "title": "智能路由页面改为真实数据（候选评分表、灰度区块）",
+      "desc": "展示 P / Q / state / trend / score 与本机状态，去掉演示数据。"
+    },
+    {
+      "req": "r-res-01",
+      "owner": "B",
+      "phase": "S",
+      "hours": 8,
+      "title": "渠道与资源实例模型：唯一 resource_id、P 只读持久化",
+      "desc": "§1.1、§2。"
+    },
+    {
+      "req": "r-res-01",
+      "owner": "C",
+      "phase": "S",
+      "hours": 12,
+      "title": "资源录入界面（渠道、资源实例、价格折数）"
+    },
+    {
+      "req": "r-res-01",
+      "owner": "B",
+      "phase": "S",
+      "hours": 10,
+      "title": "增量下发：版本号幂等与乱序最终一致",
+      "desc": "§16.2。"
+    },
+    {
+      "req": "r-res-01",
+      "owner": "B",
+      "phase": "S",
+      "hours": 6,
+      "title": "5 分钟对齐与启动全量拉取",
+      "desc": "丢事件 5 分钟内补齐；§15 #34。"
+    },
+    {
+      "req": "r-res-02",
+      "owner": "B",
+      "phase": "S",
+      "hours": 8,
+      "title": "请求级遥测接收接口与批量写入",
+      "desc": "§16.4；probe=1 与半开探测不进统计。"
+    },
+    {
+      "req": "r-res-02",
+      "owner": "B",
+      "phase": "S",
+      "hours": 10,
+      "title": "单实例 30 分钟滑窗：成功率与 TTFT P95",
+      "desc": "§5.1、§6.2、§6.3；TTFT 只统计承诺输入窗内请求，UNKNOWN_TERMINAL 不计连败。"
+    },
+    {
+      "req": "r-res-02",
+      "owner": "B",
+      "phase": "S",
+      "hours": 4,
+      "title": "遥测统计场景联调：§15 #1、#10、#14、#22、#23、#39"
+    },
+    {
+      "req": "r-res-03",
+      "owner": "C",
+      "phase": "S",
+      "hours": 8,
+      "title": "质量评级 S0 / S1 / S2 与样本不足 U 标签",
+      "desc": "§3、§5.2、§6.1；可服务档 ⟺ P ≤ G 且 Q ≥ Q_G。算法实现由 zeng 评审。"
+    },
+    {
+      "req": "r-res-03",
+      "owner": "C",
+      "phase": "S",
+      "hours": 4,
+      "title": "评级场景联调：§15 #7、#8、#9、#13、#16"
+    },
+    {
+      "req": "r-res-04",
+      "owner": "B",
+      "phase": "S",
+      "hours": 12,
+      "title": "生命周期状态机：冷 / 热 / 降级观察 / 坏 / 禁用与复检",
+      "desc": "§4。"
+    },
+    {
+      "req": "r-res-04",
+      "owner": "B",
+      "phase": "S",
+      "hours": 8,
+      "title": "5 分钟短窗变坏与波动判据，产出 trend",
+      "desc": "§5.6。"
+    },
+    {
+      "req": "r-res-04",
+      "owner": "B",
+      "phase": "S",
+      "hours": 4,
+      "title": "接收半开连败上报并全局禁用",
+      "desc": "§5.5。"
+    },
+    {
+      "req": "r-res-04",
+      "owner": "B",
+      "phase": "S",
+      "hours": 4,
+      "title": "状态机场景联调：§15 #5、#6、#15、#15b、#15c、#17、#18"
+    },
+    {
+      "req": "r-res-05",
+      "owner": "B",
+      "phase": "S",
+      "hours": 10,
+      "title": "五维评分与排名权重（score、dim_scores）",
+      "desc": "§5.8、§5.8.1。"
+    },
+    {
+      "req": "r-res-05",
+      "owner": "A",
+      "phase": "S",
+      "hours": 10,
+      "title": "分级探测调度：渠道代表采样、全量确认与预算上限",
+      "desc": "§7、§8；与星引 2.0 的探测请求接口一起联调。"
+    },
+    {
+      "req": "r-res-05",
+      "owner": "B",
+      "phase": "S",
+      "hours": 4,
+      "title": "评分与探测场景联调：§15 #23–#29"
+    },
+    {
+      "req": "r-res-06",
+      "owner": "C",
+      "phase": "S",
+      "hours": 6,
+      "title": "§13 配置主表：全部参数可配置且有默认值",
+      "desc": "§13。"
+    },
+    {
+      "req": "r-res-06",
+      "owner": "B",
+      "phase": "S",
+      "hours": 6,
+      "title": "每分钟整版快照发布（单调 snapshot_seq，只发事实字段）",
+      "desc": "§9、§16.1。"
+    },
+    {
+      "req": "r-res-06",
+      "owner": "B",
+      "phase": "S",
+      "hours": 4,
+      "title": "重启后从 0 评估且快照不断档",
+      "desc": "§9.2；§15 #31、#32、#34。"
+    },
+    {
+      "req": "r-api-22",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 8,
+      "title": "兼容测试集回放框架（Claude Code / Codex 录制回放）"
+    },
+    {
+      "req": "r-api-22",
+      "owner": "C",
+      "phase": "N1",
+      "hours": 6,
+      "title": "计费对比用例框架（金标准用例自动比对）"
+    },
+    {
+      "req": "r-api-01",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 12,
+      "title": "资源平台模拟器：下发、快照、遥测、异常上报、探测",
+      "desc": "N1 起用模拟器联调（ARC-AC-01–08）。"
+    },
+    {
+      "req": "r-api-01",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 8,
+      "title": "遥测批量发送与异常上报客户端",
+      "desc": "ARC-4.3、ARC-4.4；ARC-AC-06、07。"
+    },
+    {
+      "req": "r-api-01",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 6,
+      "title": "快照接收校验与 dim_scores.speed 缺失告警",
+      "desc": "ARC-4.2；ARC-AC-04、05。"
+    },
+    {
+      "req": "r-api-01",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 8,
+      "title": "探测接口鉴权、限速与防重放",
+      "desc": "ARC-4.5；ARC-AC-08、18。"
+    },
+    {
+      "req": "r-plg-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 10,
+      "title": "资源提供者接口定义与本地录入实现接入",
+      "desc": "ARC-4.6。"
+    },
+    {
+      "req": "r-plg-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 6,
+      "title": "远程 / 本地两种提供者一致性测试",
+      "desc": "ARC-AC-09。"
+    },
+    {
+      "req": "r-plg-01",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 10,
+      "title": "本地渠道与资源实例：模型、录入接口、凭证加密",
+      "desc": "RES-3.1、RES-3.2；RES-AC-10。"
+    },
+    {
+      "req": "r-plg-01",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 6,
+      "title": "每 10 秒生成本地快照",
+      "desc": "RES-3.3。"
+    },
+    {
+      "req": "r-plg-01",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 6,
+      "title": "本地连通测试与停用",
+      "desc": "RES-AC-11、12。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 16,
+      "title": "统一内部格式与 OpenAI Chat 流式 / 非流式",
+      "desc": "GW-2、GW-3.1、GW-3.3、GW-3.4；GW-AC-01、08。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 12,
+      "title": "Responses 协议与有状态请求（响应 ID 隔离）",
+      "desc": "GW-3.9；ARC-AC-16、GW-AC-04。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 12,
+      "title": "Anthropic Messages 协议转换",
+      "desc": "GW-3.2；GW-AC-02、03。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 10,
+      "title": "Gemini 原生协议",
+      "desc": "GW-AC-05。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 8,
+      "title": "请求头处理、敏感信息脱敏与超时",
+      "desc": "GW-3.3a、GW-3.3b、GW-3.5。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 8,
+      "title": "上游错误分类矩阵与平台错误码",
+      "desc": "GW-4、GW-4.1、GW-4.2。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 6,
+      "title": "模型列表与内容不落盘校验",
+      "desc": "GW-3.6、GW-3.8。"
+    },
+    {
+      "req": "r-api-04",
+      "owner": "A",
+      "phase": "N1",
+      "hours": 12,
+      "title": "文本选路接入：复用星引 2.0 的亲和、档位、排序与流量池",
+      "desc": "RT-3；RT-AC-01–05、GW-AC-10。"
+    },
+    {
+      "req": "r-api-06",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 12,
+      "title": "服务等级与 Key 数据模型、调用鉴权",
+      "desc": "KEY-2、KEY-3；KEY-AC-01、03、05。"
+    },
+    {
+      "req": "r-api-06",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 10,
+      "title": "额度、用量与周期重置（保留累计总用量）",
+      "desc": "KEY-5。"
+    },
+    {
+      "req": "r-api-07",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 10,
+      "title": "售价计算与纳美元精度",
+      "desc": "BIL-2.2–2.4；BIL-AC-01、16。"
+    },
+    {
+      "req": "r-api-07",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 16,
+      "title": "预扣与结算：失败不扣、流式中断按已返回扣、重试只收一次",
+      "desc": "BIL-3；BIL-AC-02–05。计费正确性不可砍，需人工逐行审查。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N1",
+      "hours": 16,
+      "title": "设计系统与三语框架基础（含从右到左）",
+      "desc": "N1 要求前端设计系统与三语框架就绪。"
+    },
+    {
+      "req": "r-api-21",
+      "owner": "B",
+      "phase": "N1",
+      "hours": 8,
+      "title": "开源构建边界与许可证检查",
+      "desc": "ARC-7；ARC-AC-10。"
+    },
+    {
+      "req": "r-api-04",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 10,
+      "title": "本机熔断降权与状态上报接入",
+      "desc": "RT-6。"
+    },
+    {
+      "req": "r-api-04",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 8,
+      "title": "快照过期兜底、未知资源与重启",
+      "desc": "RT-2；RT-AC-11、12、15、35、47。"
+    },
+    {
+      "req": "r-api-04",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 8,
+      "title": "探测请求与请求级遥测接入",
+      "desc": "RT-7、RT-8。"
+    },
+    {
+      "req": "r-api-04",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 8,
+      "title": "路由验收用例回放",
+      "desc": "M2-路由执行.feature 全部 N1 / N2 用例。"
+    },
+    {
+      "req": "r-api-05",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 10,
+      "title": "非文本按权重 / 优先级选路，组内换资源再换组",
+      "desc": "RT-5；RT-AC-09、10、48。"
+    },
+    {
+      "req": "r-api-05",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 12,
+      "title": "智能选模型 Key：最省 / 最快 / 最稳",
+      "desc": "RT-4；RT-AC-06–08、49、GW-AC-18。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 16,
+      "title": "Embeddings、图片生成与语音识别",
+      "desc": "GW-AC-12–14。"
+    },
+    {
+      "req": "r-api-02",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 6,
+      "title": "请求大小限制与跨协议兼容矩阵回放",
+      "desc": "GW-3.5a；GW-AC-33。"
+    },
+    {
+      "req": "r-api-15",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 10,
+      "title": "远程资源增量应用：幂等、丢事件与乱序",
+      "desc": "RES-2；RES-AC-01–04、08。"
+    },
+    {
+      "req": "r-api-15",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "5 分钟对齐、启动全量同步门控与资源平台不可达",
+      "desc": "RES-AC-05、09。"
+    },
+    {
+      "req": "r-api-15",
+      "owner": "A",
+      "phase": "N2",
+      "hours": 8,
+      "title": "凭证加密存储与轮换",
+      "desc": "RES-AC-06、07。"
+    },
+    {
+      "req": "r-api-06",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "Key 生命周期：修改等级、过期、停用、重新生成",
+      "desc": "KEY-4；KEY-AC-02、04、11、12。"
+    },
+    {
+      "req": "r-api-06",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 6,
+      "title": "IP 白名单（IPv6、防伪造 X-Forwarded-For）",
+      "desc": "KEY-5a；KEY-AC-10、19、20。"
+    },
+    {
+      "req": "r-api-06",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 6,
+      "title": "智能 Key 候选约束、数量上限与越权防护",
+      "desc": "KEY-AC-14、17、ARC-AC-11。"
+    },
+    {
+      "req": "r-api-07",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 10,
+      "title": "阶梯价、计价时刻锁定与跨日日切",
+      "desc": "BIL-2.1；BIL-AC-13、17、19。"
+    },
+    {
+      "req": "r-api-07",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "高并发余额上限与负数上限",
+      "desc": "BIL-AC-14、15。"
+    },
+    {
+      "req": "r-api-08",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 12,
+      "title": "账本流水与幂等入账，余额由流水推导",
+      "desc": "BIL-4；BIL-AC-18。"
+    },
+    {
+      "req": "r-api-08",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "每日地区时区 02:00 自动对账",
+      "desc": "BIL-4.1；BIL-AC-10、19。"
+    },
+    {
+      "req": "r-api-09",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 14,
+      "title": "在线充值（Stripe 测试模式）与回调幂等",
+      "desc": "BIL-5.1；BIL-AC-06、07、20、21。"
+    },
+    {
+      "req": "r-api-09",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "后台手动加款（大额双人复核）与扣回调整",
+      "desc": "BIL-5.2、BIL-5.3；BIL-AC-08、09、23、25。"
+    },
+    {
+      "req": "r-api-09",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 6,
+      "title": "拒付、订单过期回调与发票说明",
+      "desc": "BIL-5.4；BIL-AC-22、26。"
+    },
+    {
+      "req": "r-api-09",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 6,
+      "title": "余额展示与低余额提示条",
+      "desc": "BIL-6；BIL-AC-11、24。"
+    },
+    {
+      "req": "r-api-10",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 12,
+      "title": "注册、邮箱验证码、防枚举与防刷",
+      "desc": "ACC-2；ACC-AC-01–05、20。"
+    },
+    {
+      "req": "r-api-10",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 10,
+      "title": "登录与会话：锁定、会话轮换、踢下线、CSRF",
+      "desc": "ACC-3；ACC-AC-06–08、19。"
+    },
+    {
+      "req": "r-api-10",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 8,
+      "title": "找回 / 修改密码、注销与账号状态",
+      "desc": "ACC-4–7；ACC-AC-09–13。"
+    },
+    {
+      "req": "r-api-10",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 6,
+      "title": "事务性通知邮件与日志脱敏",
+      "desc": "ACC-8；ACC-AC-14、15。"
+    },
+    {
+      "req": "r-api-10",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 12,
+      "title": "注册、登录、找回密码与账号设置页面"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 10,
+      "title": "控制台页面结构与概览",
+      "desc": "UI-1、UI-3.1。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 12,
+      "title": "Key 管理界面：列表、搜索筛选与用量详情",
+      "desc": "KEY-6；KEY-AC-22、23。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 10,
+      "title": "调试台（只能选本账号 Key）",
+      "desc": "UI-3.3；ARC-AC-17。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 14,
+      "title": "用量报表与调用明细（显示实际模型与厂商）",
+      "desc": "UI-3.4、UI-3.5。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 10,
+      "title": "导出与余额充值页",
+      "desc": "UI-3.6、BIL-7；BIL-AC-27。"
+    },
+    {
+      "req": "r-api-11",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 10,
+      "title": "用量明细、报表与导出接口（按账号隔离）",
+      "desc": "ARC-AC-12、13、15。"
+    },
+    {
+      "req": "r-api-12",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 12,
+      "title": "公开模型广场：筛选、最低价与防抖动",
+      "desc": "UI-2.2；UI-AC-01–03、18。"
+    },
+    {
+      "req": "r-api-13",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 10,
+      "title": "后台账号、角色权限与 2FA",
+      "desc": "ADM-2；ADM-AC-01、12。"
+    },
+    {
+      "req": "r-api-13",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 10,
+      "title": "企业客户管理与模型价格上架接口",
+      "desc": "ADM-3、ADM-4；ADM-AC-02–06。"
+    },
+    {
+      "req": "r-api-13",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 6,
+      "title": "审计日志与系统信息权限",
+      "desc": "ADM-9、ADM-8；ADM-AC-13、19。"
+    },
+    {
+      "req": "r-api-13",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 20,
+      "title": "管理后台界面：账号、客户、上架与系统设置"
+    },
+    {
+      "req": "r-api-14",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 8,
+      "title": "快照状态与异常上报记录接口（P 不一致告警）",
+      "desc": "ADM-6.2、ADM-6.4；ADM-AC-14–16。"
+    },
+    {
+      "req": "r-api-16",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 6,
+      "title": "地区档案字段、版本与权限",
+      "desc": "I18N-2.1；I18N-AC-07、08、10、11。"
+    },
+    {
+      "req": "r-api-16",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 6,
+      "title": "地区档案管理界面",
+      "desc": "I18N-2.2。"
+    },
+    {
+      "req": "r-api-18",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 4,
+      "title": "账户并发上限",
+      "desc": "NFR-1；NFR-AC-11。"
+    },
+    {
+      "req": "r-api-19",
+      "owner": "B",
+      "phase": "N2",
+      "hours": 6,
+      "title": "安全基线：访问日志不含完整 Key",
+      "desc": "NFR-4.1；NFR-AC-13。"
+    },
+    {
+      "req": "r-plg-01",
+      "owner": "C",
+      "phase": "N2",
+      "hours": 14,
+      "title": "本地资源录入界面、批量启停与连通测试",
+      "desc": "RES-3.4；RES-AC-18、19。"
+    },
+    {
+      "req": "r-api-12",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "官网首页（无演示数据）",
+      "desc": "UI-2.1；UI-AC-14。"
+    },
+    {
+      "req": "r-api-12",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "服务状态页与可用性口径",
+      "desc": "UI-2.3；UI-AC-04、17。"
+    },
+    {
+      "req": "r-api-12",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 12,
+      "title": "开发文档站",
+      "desc": "UI-2.4；UI-AC-13。"
+    },
+    {
+      "req": "r-api-12",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "法律文本、Cookie 同意与移动端适配",
+      "desc": "UI-2.5、UI-4；UI-AC-15、23、24、ADM-AC-18。"
+    },
+    {
+      "req": "r-api-14",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "同步状态、强制全量同步与资源实例本机状态接口",
+      "desc": "ADM-6.1、ADM-6.3；ADM-AC-08–10。"
+    },
+    {
+      "req": "r-api-14",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 16,
+      "title": "运营看板与路由 / 同步状态页、事件公告",
+      "desc": "ADM-5、ADM-6、ADM-7；ADM-AC-07、11。"
+    },
+    {
+      "req": "r-api-18",
+      "owner": "A",
+      "phase": "N3",
+      "hours": 16,
+      "title": "压测与性能调优（含 Redis 故障时超支上限）",
+      "desc": "NFR-1、NFR-2；NFR-AC-01、06、12。"
+    },
+    {
+      "req": "r-api-20",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "日志与指标",
+      "desc": "NFR-6。"
+    },
+    {
+      "req": "r-api-20",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "告警与链路追踪",
+      "desc": "NFR-AC-09、10；监控告警不可砍。"
+    },
+    {
+      "req": "r-api-21",
+      "owner": "B",
+      "phase": "N3",
+      "hours": 10,
+      "title": "开源部署包与初始化安装令牌",
+      "desc": "RES-4；RES-AC-13–15、17。"
+    },
+    {
+      "req": "r-api-21",
+      "owner": "C",
+      "phase": "N3",
+      "hours": 8,
+      "title": "开源版文档、浏览器兼容与可访问性检查",
+      "desc": "NFR-7；NFR-AC-14、15。"
+    },
+    {
+      "req": "r-plg-01",
+      "owner": "B",
+      "phase": "N3",
+      "hours": 6,
+      "title": "开源版站长加价",
+      "desc": "RES-AC-16。"
+    },
+    {
+      "req": "r-api-23",
+      "owner": "A",
+      "phase": "N3",
+      "hours": 16,
+      "title": "国内流量抽样影子验证与计费差异报告",
+      "desc": "NFR-12；差异 < 0.1%（NFR-AC-19）。"
+    },
+    {
+      "req": "r-api-03",
+      "owner": "A",
+      "phase": "N3cut",
+      "hours": 16,
+      "title": "视频生成与统一任务接口",
+      "desc": "GW-3.7；GW-AC-15。预设可砍项，11/6 决定去留。"
+    },
+    {
+      "req": "r-api-03",
+      "owner": "A",
+      "phase": "N3cut",
+      "hours": 8,
+      "title": "视频任务账号隔离与视频计费对接",
+      "desc": "ARC-AC-14、BIL-AC-12。"
+    },
+    {
+      "req": "r-api-17",
+      "owner": "C",
+      "phase": "N3cut",
+      "hours": 10,
+      "title": "三语文案、默认语言、自动匹配与语言记忆",
+      "desc": "I18N-3.1、I18N-3.2；I18N-AC-01–03、12。"
+    },
+    {
+      "req": "r-api-17",
+      "owner": "C",
+      "phase": "N3cut",
+      "hours": 16,
+      "title": "阿拉伯文从右到左全量适配",
+      "desc": "I18N-3.3；I18N-AC-04、05、13。预设可砍项，11/13 决定去留。"
+    },
+    {
+      "req": "r-api-17",
+      "owner": "C",
+      "phase": "N3cut",
+      "hours": 6,
+      "title": "翻译回填与完整性检查",
+      "desc": "I18N-3.4；I18N-AC-06、09。"
+    },
+    {
+      "req": "r-api-18",
+      "owner": "A",
+      "phase": "N4",
+      "hours": 10,
+      "title": "可用区故障演练与回滚",
+      "desc": "NFR-AC-02、03、04。"
+    },
+    {
+      "req": "r-api-18",
+      "owner": "B",
+      "phase": "N4",
+      "hours": 8,
+      "title": "数据备份与恢复演练",
+      "desc": "NFR-3；NFR-AC-05。"
+    },
+    {
+      "req": "r-api-19",
+      "owner": "B",
+      "phase": "N4",
+      "hours": 12,
+      "title": "上线前安全扫描与整改",
+      "desc": "NFR-4.2；NFR-AC-07。"
+    },
+    {
+      "req": "r-api-19",
+      "owner": "B",
+      "phase": "N4",
+      "hours": 6,
+      "title": "数据保护与合规检查",
+      "desc": "NFR-5；NFR-AC-08。"
+    },
+    {
+      "req": "r-api-21",
+      "owner": "B",
+      "phase": "N4",
+      "hours": 4,
+      "title": "开源仓库许可证内容检查与最低配置演示",
+      "desc": "NFR-8；NFR-AC-16、17。"
+    }
+  ],
+  "capacityOverrides": [
+    {
+      "from": "2026-09-21",
+      "until": "2026-10-09",
+      "hours": 8,
+      "note": "10/9 交付冲刺，按规划文档的节点加班节奏排 8 小时"
+    }
+  ]
+}

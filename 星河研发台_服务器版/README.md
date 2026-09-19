@@ -95,23 +95,72 @@ npm run migrate:roles -- --apply
 node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('base64url'))"
 ```
 
-3. 构建镜像。仅首次空库需要导入；升级现有实例直接重建并重启，先完成备份核验。
+3. 构建镜像，并**二选一**准备数据。升级现有实例不需要这一步，直接重建并重启，先完成备份核验。
 
 ```sh
 docker compose config --quiet
 docker compose build
+```
+
+**A. 迁移本机正在使用的数据（推荐，保留全部真实项目、账号与文档版本）**
+
+`backend/seed/legacy.json`（随包快照）只是早期基线，比本机数据库旧，不要用它覆盖真实数据。也不要直接复制 `xinghe.sqlite`：最近的修改可能还在旁边的 `-wal`（预写日志）文件里。按下面步骤迁移：
+
+```sh
+# 在本机项目目录：停止本机使用后生成一份核验过的快照
+npm run backup -- ./xinghe-snapshot.sqlite
+# 传到服务器本目录（示例）
+scp ./xinghe-snapshot.sqlite 用户@服务器:/部署目录/
+```
+
+```sh
+# 在服务器本目录：导入到全新的数据卷（只在目标为空时执行，已有数据库会拒绝）
+chmod 644 xinghe-snapshot.sqlite
+docker compose run --rm -v "$PWD/xinghe-snapshot.sqlite:/import/snapshot.sqlite:ro" api node backend/scripts/import-snapshot.mjs /import/snapshot.sqlite
+docker compose up -d
+docker compose ps
+# 核对导入数量无误并确认能登录后，删除服务器上的快照副本
+rm xinghe-snapshot.sqlite
+```
+
+导入前会先在临时目录做一次完整恢复演练，再写入数据卷，最后核对账号、项目、需求、任务、附件和文档版本数量。迁移后沿用本机已有账号直接登录，不需要初始化凭证。
+
+**B. 全新空库（仅导入随包基线）**
+
+```sh
 docker compose run --rm api node backend/scripts/import-legacy.mjs --db /app/data/xinghe.sqlite --dry-run
 docker compose run --rm api node backend/scripts/import-legacy.mjs --db /app/data/xinghe.sqlite
 docker compose up -d
 docker compose ps
 ```
 
-4. 将加密网关转发到 `http://127.0.0.1:8080`（本机网页容器入口）。接口容器不向宿主机发布端口。
-5. 首次打开实际站点，在地址末尾追加 `/#setup=你的初始化凭证`（初始化入口片段），设置账号及至少 6 位密码；已有管理员直接登录。
+4. 将加密网关转发到 `http://127.0.0.1:8080`（本机网页容器入口）。接口容器不向宿主机发布端口。最简单的做法是在宿主机安装 Caddy（自动申请证书），参照 `deploy/Caddyfile.example`。用宿主机 Nginx 时须同时设置 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`，网页容器据此识别真实来源地址，用于登录限流和访问日志。网页容器已发送 `Strict-Transport-Security`（强制加密访问）头。
+5. 方案 B 首次打开实际站点，在地址末尾追加 `/#setup=你的初始化凭证`（初始化入口片段），设置账号及至少 6 位密码；已有管理员直接登录。
+
+两个容器的日志按 10 MB × 5 份自动轮转，不会长期占满磁盘。
 
 `xinghe-data`（数据持久卷）保存业务数据、附件、会话、审计和主备份。重建镜像不会清空卷；升级不要使用删除卷的命令。数据结构升级保留原附件编号与内容，不能用旧版程序降级打开升级后的库。
 
 接口镜像固定为 `node:24.19.0-bookworm-slim`（运行环境镜像），包含 `/app/backend`（后端目录）、`/app/frontend/workflow.js`（共享规则）、`/app/package.json`（模块声明）及 `/app/deploy/admin-recovery.mjs`（管理员救援）。网页镜像包含完整前端文件。完整自动测试须在完整源码目录运行；接口镜像不包含全部网页及本机启动测试所需文件。
+
+## 项目文档与 PRD 同步
+
+项目文档（PRD、技术方案、验收用例、原型、其他）挂在项目下，保留全部历史版本；需求通过 `docRefs`（文档名 + 章节编号）和 `acceptanceCases`（用例编号）关联到具体章节。章节编号自动识别：PRD 取标题里的〔编号〕，技术方案取 `§` 章节号，`.feature` 取每个用例的第一个 `@标签`。
+
+PRD 以本地 `新方向/` 目录为准，定版时同步到平台：
+
+```bash
+npm run import:docs -- --dry-run   # 只列出将要处理的文件
+npm run import:docs                # 内容变化的文件生成新版本，未变化的跳过
+```
+
+映射写在 `docs-import.json`：源文件 → 目标项目（可多个）、文档类型、是否主文档。同一文件用于多个项目时各项目保存一份副本，由这条命令一起更新。新版本修改了某条需求关联的章节时，该需求的主责开发、项目主开发和测试会在站内提醒中看到（7 天内）。
+
+数据库第 4 版新增 `documents`、`document_versions` 两张表，打开旧库时自动创建，不改动已有数据。
+
+## 任务拆分与排期脚本
+
+`backend/migrations/task-plan-2026-09-18-merged.json` 是当前生效的任务计划：4 个真实项目共 71 个研发任务，每个任务 2～3 天、对应一个可演示成果（分工、工时、阶段）。`task-plan-2026-09-18.json` 是最初的 130 个细粒度任务，保留备查。任务的作用是管理进度，不要拆到半天粒度，场景联调并入实现任务。`--replace` 用新计划替换尚未开工的任务（旧任务归档保留，基线同步重置），已有进展的需求不受影响。`npm run plan:tasks` 按新加坡工作日和每人每天产能自动算出任务与需求日期：默认只预检，输出每条需求的起止、每人负载与超出目标日期的需求；追加 `--apply` 才写入，写入前自动备份，已有任务的需求整条跳过。可用 `--plan`、`--db` 指定其他计划文件和数据库。
 
 ## 自动备份与恢复演练
 
@@ -128,6 +177,20 @@ docker compose ps
 | `BACKUP_SECONDARY_DIRECTORY`（第二备份目录） | 空 | 可选；容器必须另行挂载可写目录 |
 
 备份包含已经提交的预写日志数据。检查通过后才以新文件发布，已有目标拒绝覆盖；每份快照是可独立读取的数据库文件。第二目录复制已完成的同一快照，状态单独记录。仅配置第二目录或看到不同设备编号都不能证明完成物理异地备份；需要运维确认实际设备、位置、权限与可恢复性。
+
+### 异地备份（服务器部署必做）
+
+主备份与数据库在同一数据卷、同一块磁盘上，磁盘损坏或误删数据卷时会一起丢失。至少完成下面一项：
+
+1. **第二块磁盘**：按 `deploy/compose.offsite.yaml` 顶部说明准备目录，在 `.env` 中设置 `BACKUP_SECONDARY_HOST_DIR` 与 `COMPOSE_FILE=compose.yaml:deploy/compose.offsite.yaml`，重新 `docker compose up -d`。管理员在「备份状态」里确认第二目录显示成功且为不同设备。
+2. **另一台机器或对象存储**：在宿主机用定时任务同步备份目录，例如每天凌晨同步到另一台主机：
+
+```sh
+# sudo crontab -e 中添加一行（读取数据卷需要 root 权限）；卷名用 docker volume ls 查询
+30 3 * * * rsync -a --delete "$(docker volume inspect -f '{{ .Mountpoint }}' 部署目录名_xinghe-data)/backups/" 备份用户@备份主机:/backups/xinghe/
+```
+
+每季度至少取一份异地副本执行一次 `restore:check`（恢复演练），确认能真正恢复。
 
 手动备份及隔离恢复演练：
 

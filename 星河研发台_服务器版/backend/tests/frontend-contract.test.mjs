@@ -39,7 +39,7 @@ async function fixture(t,{initialize=true,setupToken='',hash='#/team',recoveryLi
   class MockForm {constructor(kind,entries,id=''){this.dataset={kind,id,projectId:'p-exec'};this.entries=Object.entries(entries);this.id='entity-form';}querySelector(selector){return element(selector);}}
   class MockFormData {constructor(form){this.values=form.entries;}[Symbol.iterator](){return this.values[Symbol.iterator]();}getAll(key){return this.values.filter(entry=>entry[0]===key).map(entry=>entry[1]);}}
   const api=async(path,options={})=>{const result=await request('/api'+path,options);if(!result.ok)throw Object.assign(new Error(result.data.error),{status:result.status,code:result.data.code});return result.data;};
-  const context=vm.createContext({...uiKit,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
+  const context=vm.createContext({...uiKit,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
   const source=fs.readFileSync(new URL('../../frontend/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace(/\nboot\(\);\s*$/,'');
   vm.runInContext(source,context);
   if(admin){
@@ -114,10 +114,10 @@ test('排期页面接通全局视图、缩放档位、自定义日期与独立�
   assert.equal(f.run('resolveTimelineRange(timelineState(),timelineContext()).end'),'2027-03-31');
   await click({timelineMode:'quarter'});assert.equal(f.run('timelineState().mode'),'quarter');assert.equal(f.run('timelineState().zoom'),null);
   await click({timelineFit:''});
-  await f.listeners.change({target:{id:'project-switch',dataset:{},value:'p-res'}});
+  await click({switchProject:'p-res'});
   assert.equal(f.context.location.hash,'#/p/p-res/timeline');
   f.run('readRoute();renderShell();');assert.equal(f.run('timelineState().mode'),'month');assert.ok(!f.run('timelineState().fit'));
-  await f.listeners.change({target:{id:'project-switch',dataset:{},value:'p-exec'}});
+  await click({switchProject:'p-exec'});
   f.run('readRoute();renderShell();');assert.equal(f.run('timelineState().fit'),true);
   await f.listeners.change({target:{dataset:{timelineFilter:'status'},value:'develop'}});
   assert.equal(f.run('timelineState().status'),'develop');
@@ -458,4 +458,21 @@ test('前端需求和任务编辑暴露依赖选择，未完成前置任务时�
   assert.doesNotMatch(f.run('taskOptions("wait","p-exec",{dependencyIds:["missing-task"]})'),/value="develop"/);
   f.context.reqId=f.run('data.requirements.find(item=>item.projectId==="p-exec").id');
   f.run('editRequirement(reqId)');assert.match(f.element('#dialog').innerHTML,/前置需求|name="dependencyIds"/);
+});
+
+test('自动同步：只读页面拉取他人修改后重绘，打开弹窗或正在输入时只更新数据不打断',async t=>{
+  const f=await fixture(t);
+  f.run('route={view:"overview",projectId:"p-exec"};renderShell();');
+  await f.run('reload()');f.element('#project-menu').hidden=true;
+  const rename=name=>{const row=f.db.prepare("SELECT data FROM projects WHERE id='p-exec'").get();f.db.prepare("UPDATE projects SET data=?,version=version+1 WHERE id='p-exec'").run(JSON.stringify({...JSON.parse(row.data),name}));};
+  rename('同事改过的项目名');
+  await f.run('autoRefresh()');
+  assert.match(f.element('#app').innerHTML,/同事改过的项目名/);
+  assert.match(f.element('[data-sync-note]').textContent,/数据更新于 \d{2}:\d{2}/);
+  f.element('#dialog').open=true;rename('弹窗期间的新名字');
+  await f.run('autoRefresh()');
+  assert.doesNotMatch(f.element('#app').innerHTML,/弹窗期间的新名字/);
+  assert.equal(f.run('projectOf("p-exec").name'),'同事改过的项目名');
+  f.element('#dialog').open=false;f.run('route={view:"requirements",projectId:"p-exec"};');
+  assert.equal(f.run('canAutoRefresh()'),false);
 });

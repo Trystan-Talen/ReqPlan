@@ -1,8 +1,10 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { createAttachmentService } from './attachments.mjs';
-import { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES, OWNER_ROLES, LEAD_REQUIREMENT_FIELDS, taskStage, roleCan, checkRequirementTransition, checkTaskTransition, normalizeBaseline, taskGranularity } from '../frontend/workflow.js';
+import { createDocumentService } from './documents.mjs';
+import { DOCUMENT_TYPES } from '../frontend/doc-sections.js';
+import { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES, OWNER_ROLES, REVIEW_ROLES, LEAD_REQUIREMENT_FIELDS, taskStage, roleCan, checkRequirementTransition, checkTaskTransition, normalizeBaseline, taskGranularity } from '../frontend/workflow.js';
 export { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES } from '../frontend/workflow.js';
-const REQ_FIELDS = ['title', 'description', 'acceptance', 'projectId', 'source', 'status', 'priority', 'ownerId', 'assigneeId', 'collaboratorIds', 'planStart', 'planEnd', 'estimatePoints', 'dependencyIds'];
+const REQ_FIELDS = ['title', 'description', 'acceptance', 'projectId', 'source', 'status', 'priority', 'ownerId', 'assigneeId', 'collaboratorIds', 'planStart', 'planEnd', 'estimatePoints', 'dependencyIds', 'docRefs', 'acceptanceCases'];
 const TASK_FIELDS = ['title', 'projectId', 'requirementId', 'ownerId', 'status', 'startDate', 'dueDate', 'estimateHours', 'estimatePoints', 'description', 'dependencyIds'];
 const PROJECT_FIELDS = ['name', 'description', 'ownerId', 'status', 'startDate', 'targetDate', 'milestones'];
 const now = () => new Date().toISOString();
@@ -131,7 +133,25 @@ export function createBusiness(db) {
     result.planStart = date(result.planStart, '需求开始日期'); result.planEnd = date(result.planEnd, '需求截止日期'); dates(result.planStart, result.planEnd);
     result.estimatePoints = number(result.estimatePoints ?? 0, '需求估算点数', 10000);
     validateRequirementDependencies(result);
+    validateDocumentLinks(result);
     return result;
+  }
+  // 关联文档章节：[{ document: 文件名, type: 文档类型, sections: [章节编号] }]；acceptanceCases 为验收用例编号。
+  // 允许引用尚未上传的文档（界面显示「文档尚未上传」），编号只校验格式。
+  function validateDocumentLinks(result) {
+    const code = (value, label) => { if (typeof value !== 'string' || !/^[§A-Za-z0-9][\w.§-]{0,79}$/u.test(value)) fail(400, `${label}编号格式不正确：${String(value).slice(0, 40)}`); return value; };
+    if (result.docRefs === undefined) result.docRefs = [];
+    if (!Array.isArray(result.docRefs) || result.docRefs.length > 50) fail(400, '关联文档应为最多 50 项的列表');
+    result.docRefs = result.docRefs.map(ref => {
+      if (!ref || typeof ref !== 'object' || Array.isArray(ref)) fail(400, '关联文档格式不正确');
+      const document = text(ref.document, '关联文档名称', 200, true);
+      if (ref.type !== undefined && !DOCUMENT_TYPES.includes(ref.type)) fail(400, '关联文档类型不是允许的选项');
+      if (!Array.isArray(ref.sections || []) || (ref.sections || []).length > 200) fail(400, '关联章节应为最多 200 项的列表');
+      return { document, ...(ref.type ? { type: ref.type } : {}), sections: [...new Set((ref.sections || []).map(value => code(value, '章节')))] };
+    });
+    if (result.acceptanceCases === undefined) result.acceptanceCases = [];
+    if (!Array.isArray(result.acceptanceCases) || result.acceptanceCases.length > 500) fail(400, '验收用例应为最多 500 项的列表');
+    result.acceptanceCases = [...new Set(result.acceptanceCases.map(value => code(value, '验收用例')))];
   }
   function validateRequirementDependencies(result) {
     if (result.dependencyIds === undefined) result.dependencyIds = [];
@@ -203,8 +223,8 @@ export function createBusiness(db) {
     const value = rowValue(row);
     if (write && access.role !== 'admin') {
       const allowed = type === 'task'
-        ? access.role === 'lead' || access.role === 'tester' || (access.role === 'developer' && value.ownerId === access.user.id)
-        : ['product', 'lead', 'tester'].includes(access.role) || (access.role === 'developer' && participates(row.id, access.user.id));
+        ? access.role === 'lead' || access.role === 'tester' || (access.role === 'developer' && value.ownerId === access.user.id) || (REVIEW_ROLES.includes(access.role) && ['test', 'done'].includes(taskStage(value.status)))
+        : ['product', 'lead', 'tester'].includes(access.role) || (access.role === 'developer' && (participates(row.id, access.user.id) || ['测试中', '已完成'].includes(value.status)));
       if (!allowed) fail(403, type === 'task' ? '只能修改自己负责的任务' : '只能修改自己参与的需求', 'FORBIDDEN');
     }
     if (write && row.archived) fail(409, '记录已归档，请先恢复', 'ARCHIVED');
@@ -432,11 +452,11 @@ export function createBusiness(db) {
     return transaction(() => { const row = record('tasks', taskId); const access = entityPermission(actor, row, 'task', true); expectedVersion(row, input.version);
       if (input.projectId && input.projectId !== row.project_id) fail(400, '任务不能直接跨项目移动');
       const before = JSON.parse(row.data); const data = validateTask(input, before);
-      if (access.role === 'developer') restrictFields(input, before, data, TASK_FIELDS.filter(key => !['ownerId', 'requirementId', 'projectId'].includes(key)).concat(['version', 'reason']), '任务转派和关联变更需要主开发');
-      if (access.role === 'tester') restrictFields(input, before, data, ['version', 'status', 'reason'], '测试角色只能验收或退回任务');
+      if (access.role === 'developer' && before.ownerId === access.user.id) restrictFields(input, before, data, TASK_FIELDS.filter(key => !['ownerId', 'requirementId', 'projectId'].includes(key)).concat(['version', 'reason']), '任务转派和关联变更需要主开发');
+      else if (['developer', 'product', 'tester'].includes(access.role)) restrictFields(input, before, data, ['version', 'status', 'reason'], '只能验收或退回他人的任务');
       if (before.requirementId && !data.requirementId) fail(400, '任务必须关联需求');
       const dependencies = data.dependencyIds.map(dependencyId => rowValue(get('SELECT * FROM tasks WHERE id=? AND project_id=?', dependencyId, data.projectId)));
-      const transition = checkTaskTransition(access.role, before.status, data.status, { reason: text(input.reason, '操作说明', 1000), dependencies });
+      const transition = checkTaskTransition(access.role, before.status, data.status, { reason: text(input.reason, '操作说明', 1000), dependencies, ownTask: before.ownerId === access.user.id });
       if (!transition.ok) fail(transition.status, transition.message, transition.code);
       data.completedAt = taskStage(data.status) === 'done' ? (taskStage(before.status) === 'done' ? before.completedAt || '' : now()) : '';
       const result = updateRow('tasks', row, data); run('UPDATE tasks SET requirement_id=? WHERE id=?', data.requirementId || null, taskId);
@@ -518,6 +538,16 @@ export function createBusiness(db) {
     authorizeWrite: (actor, row) => { const access = permission(actor, row.project_id, ['product', 'lead']); if (row.archived) fail(409, '记录已归档，请先恢复', 'ARCHIVED'); return { ...access, value: rowValue(row) }; },
     audit,
   });
+  // Product managers maintain every document type; lead developers may maintain technical specs.
+  const documents = createDocumentService(db, {
+    authorize: (actor, projectId, write, type) => {
+      if (!write) return permission(actor, projectId, null);
+      const access = permission(actor, projectId, ['product', 'lead']);
+      if (access.role === 'lead' && type !== '技术方案') fail(403, '主开发只能上传和维护技术方案，其他文档由产品经理维护', 'FORBIDDEN');
+      return access;
+    },
+    audit,
+  });
   function bootstrap(actor, options = {}) {
     const user = actorUser(actor); const projects = listProjects(actor, options); const projectIds = new Set(projects.map(item => item.id));
     const requirements = listEntities(actor, 'requirements', options); const tasks = listEntities(actor, 'tasks', options);
@@ -528,10 +558,11 @@ export function createBusiness(db) {
     // Project owners need the safe account directory to add existing accounts
     // which do not yet belong to a project. Credentials stay in auth-only APIs.
     const users = all('SELECT id,username,name,role,executive,status FROM users').filter(row => canManageMembers || visibleUserIds.has(row.id)).map(publicUser);
-    return { currentUser: publicUser(user), projects, requirements, tasks, users, memberships, requirementStatuses: REQUIREMENT_STATUSES, taskStatuses: TASK_STATUSES, projectRoles: PROJECT_ROLES };
+    return { currentUser: publicUser(user), projects, requirements, tasks, users, memberships, documents: documents.listForProjects(projectIds), requirementStatuses: REQUIREMENT_STATUSES, taskStatuses: TASK_STATUSES, projectRoles: PROJECT_ROLES };
   }
   return Object.freeze({ bootstrap, listProjects, getProject: (actor, projectId) => permission(actor, projectId).project, createProject, updateProject, archiveProject,
     listRequirements: (actor, options = {}) => listEntities(actor, 'requirements', options), getRequirement: (actor, requirementId) => { const row = record('requirements', requirementId); return entityPermission(actor, row, 'requirement').value; }, createRequirement, updateRequirement, archiveRequirement: (actor, requirementId, input) => archiveEntity(actor, requirementId, input, 'requirement'),
     listTasks: (actor, options = {}) => listEntities(actor, 'tasks', options), getTask: (actor, taskId) => { const row = record('tasks', taskId); return entityPermission(actor, row, 'task').value; }, createTask, createTaskBatch, updateTask, archiveTask: (actor, taskId, input) => archiveEntity(actor, taskId, input, 'task'),
-    previewSchedule, applySchedule, listMembers, setMember, removeMember, listHistory, listAttachments, uploadAttachment, getAttachment, listAttachmentVersions });
+    previewSchedule, applySchedule, listMembers, setMember, removeMember, listHistory, listAttachments, uploadAttachment, getAttachment, listAttachmentVersions,
+    listDocuments: documents.listDocuments, listDocumentVersions: documents.listVersions, getDocumentContent: documents.getContent, uploadDocument: documents.uploadDocument, updateDocument: documents.updateDocument });
 }

@@ -18,6 +18,9 @@
     "prepare:legacy": "node backend/scripts/prepare-legacy.mjs",
     "start:local": "node deploy/launch-local.mjs",
     "recover:admin": "node deploy/admin-recovery.mjs",
-    "migrate:roles": "node backend/scripts/migrate-roles.mjs"
+    "migrate:roles": "node backend/scripts/migrate-roles.mjs",
+    "import:docs": "node backend/scripts/import-docs.mjs",
+    "import:snapshot": "node backend/scripts/import-snapshot.mjs",
+    "plan:tasks": "node backend/scripts/plan-tasks.mjs"
   }
 }

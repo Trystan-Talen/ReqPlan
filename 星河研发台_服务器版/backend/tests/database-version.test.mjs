@@ -10,10 +10,10 @@ test('数据库结构版本持久保存，拒绝降级打开未来版本',()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'xinghe-schema-'));
   const file=path.join(dir,'data.sqlite');
   try{
-    let db=openDatabase(file);assert.equal(db.prepare('PRAGMA user_version').get().user_version,3);db.close();
-    db=openDatabase(file);db.exec('PRAGMA user_version=4');db.close();
+    let db=openDatabase(file);assert.equal(db.prepare('PRAGMA user_version').get().user_version,4);db.close();
+    db=openDatabase(file);db.exec('PRAGMA user_version=5');db.close();
     assert.throws(()=>openDatabase(file),/不能降级/);
-    const future=new DatabaseSync(file,{readOnly:true});assert.equal(future.prepare('PRAGMA user_version').get().user_version,4);future.close();
+    const future=new DatabaseSync(file,{readOnly:true});assert.equal(future.prepare('PRAGMA user_version').get().user_version,5);future.close();
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
 

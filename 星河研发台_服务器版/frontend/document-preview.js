@@ -1,3 +1,5 @@
+import { markdownMode, headingCode } from './doc-sections.js';
+
 // A deliberately small document reader, not a complete Markdown implementation.
 // Raw HTML is always text; only markup assembled here reaches the document.
 const MAX_CHARACTERS=200000,MAX_LINES=4000,MAX_OUTPUT=1000000,MAX_HEADINGS=200;
@@ -71,7 +73,8 @@ function blocks(lines,state,depth=0) {
     if((match=headingMatch(line))) {
       const level=match[1].length,title=match[2].replace(/\s+#+\s*$/,'');const id=`doc-heading-${++state.headingCount}`;
       if(state.headings.length<MAX_HEADINGS)state.headings.push({level,id,title:headingText(title)});else state.notices.add('目录仅列出前 200 个标题，正文仍可继续阅读。');
-      output.push(`<h${level} id="${id}" tabindex="-1">${inline(title,state)}</h${level}>`);index++;continue;
+      const section=headingCode(title,state.mode);
+      output.push(`<h${level} id="${id}" tabindex="-1"${section?` data-section="${escape(section)}"`:''}>${inline(title,state)}</h${level}>`);index++;continue;
     }
     if(/^ {0,3}>/.test(line)) {
       const quote=[];while(index<lines.length&&/^ {0,3}>/.test(lines[index]))quote.push(lines[index++].replace(/^ {0,3}>[ \t]?/,''));
@@ -107,22 +110,41 @@ function blocks(lines,state,depth=0) {
   }
   return output.join('\n');
 }
-function compose(source,limited) {
-  const state={headings:[],headingCount:0,notices:new Set()};const body=blocks(source.split('\n'),state);
+function compose(source,limited,options={}) {
+  const state={headings:[],headingCount:0,notices:new Set(),mode:options.mode||'numbered'};const body=blocks(source.split('\n'),state);
   if(limited)state.notices.add('文档较长，当前仅展示部分内容。预览最多处理 20 万字符、4000 行，生成内容最多 100 万字符；请下载原文件查看全文。');
   const notices=[...state.notices].map(text=>`<p class="document-preview-notice" role="note">${escape(text)}</p>`).join('');
-  const toc=state.headings.length?`<nav class="document-toc" aria-label="文档目录"><h2>文档目录</h2><ol>${state.headings.map(heading=>`<li class="document-toc-level-${heading.level}"><button type="button" data-document-anchor="${heading.id}">${escape(heading.title||'未命名标题')}</button></li>`).join('')}</ol></nav>`:'';
+  const toc=options.toc!==false&&state.headings.length?`<nav class="document-toc" aria-label="文档目录"><h2>文档目录</h2><ol>${state.headings.map(heading=>`<li class="document-toc-level-${heading.level}"><button type="button" data-document-anchor="${heading.id}">${escape(heading.title||'未命名标题')}</button></li>`).join('')}</ol></nav>`:'';
   return `<div class="document-preview">${notices}${toc}<div class="document-body">${body||'<p>文档为空。</p>'}</div></div>`;
 }
 
-export function renderDocumentPreview(text) {
+// options.toc=false hides the built-in outline when the caller shows its own section list.
+export function renderDocumentPreview(text, options = {}) {
   if(text===null||text===undefined)text='';
   if(typeof text!=='string')return '<div class="document-preview"><p>无法预览：文件内容不是文本。</p></div>';
   const normalized=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').replace(/\u0000/g,'\ufffd');
   let source=normalized.slice(0,MAX_CHARACTERS).split('\n').slice(0,MAX_LINES).join('\n');let limited=source.length!==normalized.length;
-  let html=compose(source,limited);
+  const settings={toc:options.toc,mode:markdownMode(normalized)};
+  let html=compose(source,limited,settings);
   // Re-render a shorter source instead of slicing HTML, so every truncation
   // preserves complete tags, safe attributes and valid navigation targets.
-  while(html.length>MAX_OUTPUT){source=source.slice(0,Math.floor(source.length*0.75));limited=true;html=compose(source,limited);}
+  while(html.length>MAX_OUTPUT){source=source.slice(0,Math.floor(source.length*0.75));limited=true;html=compose(source,limited,settings);}
   return html;
+}
+
+// Gherkin acceptance files: one card per scenario, anchored by its case code (first @tag).
+export function renderFeaturePreview(text) {
+  if(typeof text!=='string')return '<div class="document-preview"><p>无法预览：文件内容不是文本。</p></div>';
+  const lines=text.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').split('\n').slice(0,MAX_LINES);
+  const intro=[],cards=[];let current=null;
+  for(let index=0;index<lines.length;index++) {
+    const line=lines[index],tags=line.trim().split(/\s+/);
+    if(tags[0]?.startsWith('@')&&/^\s*Scenario/.test(lines[index+1]||'')) {
+      current={code:tags[0].slice(1),tags:tags.slice(1),title:lines[index+1].replace(/^\s*Scenario( Outline)?:\s*/,'').trim(),steps:[]};cards.push(current);index++;continue;
+    }
+    (current?current.steps:intro).push(line);
+  }
+  const trim=list=>list.join('\n').replace(/^\n+|\s+$/g,'');
+  const card=item=>`<article class="feature-scenario" data-section="${escape(item.code)}" tabindex="-1"><header><code>${escape(item.code)}</code><strong>${escape(item.title)}</strong></header>${item.tags.length?`<p class="feature-tags">${item.tags.map(tag=>`<span>${escape(tag)}</span>`).join('')}</p>`:''}<pre>${escape(trim(item.steps.map(step=>step.replace(/^ {4}/,''))))}</pre></article>`;
+  return `<div class="document-preview"><div class="document-body feature-body">${trim(intro)?`<pre class="feature-intro">${escape(trim(intro))}</pre>`:''}${cards.map(card).join('')||'<p>没有识别到验收用例。</p>'}</div></div>`;
 }

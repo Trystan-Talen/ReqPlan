@@ -1,0 +1,86 @@
+/* ==========================================================================
+   Page · 全局排期（项目全景表 + 跨项目甘特图）
+   view: renderPortfolio（portfolio.js）。甘特图的坐标轴、网格、滚动容器与缩放控件
+   沿用 timeline.css 中的 .schedule-*；这里只写全景页特有的结构。
+   ========================================================================== */
+
+/* ---------- 项目概况表 ---------- */
+.portfolio-project-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.portfolio-project-name > span:last-child { min-width: 0; display: grid; }
+.portfolio-glyph { width: 28px; height: 28px; font-size: 12px; }
+.portfolio-next { display: grid; gap: 1px; min-width: 120px; }
+.portfolio-next strong { font-size: var(--text-sm); font-weight: 600; }
+.portfolio-progress { display: grid; gap: 6px; min-width: 180px; }
+.portfolio-segments { display: flex; height: 8px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-3); }
+.portfolio-segment { height: 100%; }
+.portfolio-segment-review { background: var(--c-violet); }
+.portfolio-segment-plan { background: var(--c-slate); }
+.portfolio-segment-progress { background: var(--c-blue); }
+.portfolio-segment-test { background: var(--c-amber); }
+.portfolio-segment-done { background: var(--c-green); }
+.portfolio-backlog { font-size: var(--text-sm); color: var(--text-2); white-space: nowrap; }
+
+/* ---------- 甘特图：三级行 ---------- */
+.portfolio-chart { --name-w: 280px; }
+.portfolio-row .schedule-name { flex-direction: row; align-items: center; justify-content: flex-start; gap: 6px; }
+.portfolio-name-copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.portfolio-level-1 .schedule-name { padding-left: 34px; }
+.portfolio-level-2 .schedule-name { padding-left: 54px; }
+.portfolio-level-0 { background: var(--surface-2); }
+.portfolio-level-0 .schedule-name { background: var(--surface-2); }
+.portfolio-level-0 .schedule-task-name { font-weight: 650; }
+.portfolio-level-2 .schedule-task-name { font-weight: 500; color: var(--text-2); }
+.portfolio-toggle { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: var(--radius-xs); font-size: 16px; line-height: 1; color: var(--text-3); transition: transform var(--duration-fast), background var(--duration-fast); }
+.portfolio-toggle:hover { background: var(--surface-3); color: var(--text); }
+.portfolio-toggle.is-open { transform: rotate(90deg); }
+.portfolio-toggle-space { flex: none; width: 20px; }
+.portfolio-risk-label { color: var(--c-amber); font-weight: 600; }
+.portfolio-person-name { font-size: 13px; font-weight: 600; }
+.portfolio-undated { position: absolute; top: 50%; left: var(--space-3); transform: translateY(-50%); font-size: var(--text-xs); color: var(--text-3); }
+.portfolio-expand { display: inline-flex; gap: var(--space-3); }
+
+/* 项目周期（开始 → 目标日期）作浅色底带；需求排期汇总成项目条，深色部分为进度。 */
+.portfolio-cycle { position: absolute; top: calc(50% + 3px); height: 28px; transform: translateY(-50%); border-radius: var(--radius-sm); border: 1px dashed var(--border-strong); background: color-mix(in srgb, var(--surface-3) 70%, transparent); }
+.portfolio-project-bar {
+  position: absolute; top: calc(50% + 3px); height: 18px; transform: translateY(-50%); z-index: 1;
+  display: flex; align-items: center; padding: 0 var(--space-2); overflow: hidden; border-radius: var(--radius-xs);
+  font-size: var(--text-xs); font-weight: 650; color: var(--on-accent); white-space: nowrap;
+  background: linear-gradient(90deg, var(--project) var(--progress), color-mix(in srgb, var(--project) 45%, transparent) var(--progress));
+  box-shadow: var(--shadow-bar);
+}
+.portfolio-project-bar span { overflow: hidden; text-overflow: ellipsis; }
+.portfolio-project-bar.is-late { outline: 2px solid var(--bar-overdue); outline-offset: 1px; }
+.portfolio-milestone { position: absolute; top: 1px; transform: translateX(-50%); z-index: 2; font-size: 11px; line-height: 1; color: var(--accent); cursor: default; }
+.portfolio-milestone.is-target { color: var(--c-red); }
+.portfolio-target-line { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; background: var(--c-red); opacity: .55; }
+
+/* 需求条：底部细条表示进度；有风险加琥珀描边；基线为条下方的细线。 */
+.portfolio-requirement-bar { height: 22px; }
+.portfolio-requirement-bar::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: var(--progress); background: var(--on-accent); opacity: .75; }
+.portfolio-requirement-bar.is-risk { box-shadow: 0 0 0 2px var(--c-amber); }
+.portfolio-baseline { position: absolute; top: calc(50% + 14px); height: 3px; border-radius: 2px; background: var(--text-3); opacity: .55; }
+
+/* 按人员：同一人时间重叠的任务分泳道，颜色为项目识别色。 */
+.portfolio-person-row { align-items: stretch; }
+.portfolio-lane-bar {
+  position: absolute; height: 24px; min-width: 6px; z-index: 1;
+  display: flex; align-items: center; padding: 0 var(--space-2); overflow: hidden; border-radius: var(--radius-xs);
+  font-size: var(--text-xs); font-weight: 600; color: var(--on-accent); text-align: left; white-space: nowrap;
+  background: var(--project); box-shadow: var(--shadow-bar); cursor: pointer; transition: filter var(--duration-fast);
+}
+.portfolio-lane-bar span { overflow: hidden; text-overflow: ellipsis; }
+.portfolio-lane-bar:hover { filter: brightness(1.08); }
+.portfolio-lane-bar.is-overdue { background: repeating-linear-gradient(135deg, var(--bar-overdue) 0 8px, var(--bar-overdue-stripe) 8px 16px); }
+
+/* 图例 */
+.portfolio-legend-project { background: linear-gradient(90deg, var(--project-1) 60%, color-mix(in srgb, var(--project-1) 45%, transparent) 60%); }
+.portfolio-legend-risk { background: var(--bar-develop); box-shadow: 0 0 0 2px var(--c-amber); }
+.portfolio-legend-baseline { height: 3px !important; background: var(--text-3); }
+.portfolio-legend-target { width: 2px !important; height: 12px !important; border-radius: 1px !important; background: var(--c-red); }
+.portfolio-legend-swatch { background: var(--project); }
+
+@media (max-width: 900px) {
+  .portfolio-chart { --name-w: 190px; }
+  .portfolio-level-1 .schedule-name { padding-left: 24px; }
+  .portfolio-level-2 .schedule-name { padding-left: 36px; }
+}

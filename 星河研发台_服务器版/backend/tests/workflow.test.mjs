@@ -4,11 +4,12 @@ import { checkRequirementTransition, availableRequirementActions, availableTaskS
 
 test('共享需求流程保持门禁、角色验收及中文旧任务兼容', () => {
   const previous = { status: '测试中', acceptance: '验收口径' }, next = { ...previous, status: '已完成' };
-  assert.equal(checkRequirementTransition('developer', previous, next, { tasks: [{status:'已完成'}] }).code, 'FORBIDDEN');
+  assert.equal(checkRequirementTransition('viewer', previous, next, { tasks: [{status:'已完成'}] }).code, 'FORBIDDEN');
+  for (const role of ['product', 'lead', 'developer']) assert.equal(checkRequirementTransition(role, previous, next, { tasks: [{status:'已完成'}] }).ok, true);
   assert.equal(checkRequirementTransition('tester', previous, next, { tasks: [{status:'已完成'}, {status:'已终止'}] }).ok, true);
   assert.equal(checkRequirementTransition('admin', previous, next, { tasks: [{status:'done',archived:true}] }).code, 'TRANSITION_GATE');
   assert.equal(checkRequirementTransition('admin', {status:'未确定'}, {status:'已完成'}).code, 'STATE_TRANSITION');
-  assert.equal(availableRequirementActions('developer', previous).some(action => action.status === '已完成'), false);
+  assert.equal(availableRequirementActions('developer', previous).find(action => action.status === '已完成').allowed, false);
   assert.equal(availableRequirementActions('tester', previous).find(action => action.status === '已完成').allowed, false);
   assert.deepEqual(availableRequirementActions('viewer', previous), []);
   const ready = { status:'已确定', acceptance:'有标准', assigneeId:'dev', planStart:'2026-09-01', planEnd:'2026-09-10' };
@@ -42,7 +43,11 @@ test('角色流转矩阵：产品管评审和终止，主开发拆分排期，�
 
 test('共享任务动作只显示相邻且角色允许的选项，终止仍必须填原因', () => {
   assert.deepEqual(availableTaskStatuses('developer','待开始'), ['wait','develop']);
-  assert.deepEqual(availableTaskStatuses('developer','测试中'), ['test','develop']);
+  assert.deepEqual(availableTaskStatuses('developer','测试中'), ['test','develop','done']);
+  assert.deepEqual(availableTaskStatuses('product','测试中'), ['test','develop','done']);
+  assert.deepEqual(availableTaskStatuses('viewer','测试中'), ['test']);
+  assert.deepEqual(availableTaskStatuses('developer','测试中',{ownTask:true}), ['test','develop']);
+  assert.deepEqual(availableTaskStatuses('lead','测试中',{ownTask:true}), ['test','develop','done','terminated']);
   assert.deepEqual(availableTaskStatuses('tester','测试中'), ['test','develop','done']);
   assert.equal(checkTaskTransition('lead','develop','terminated').ok, false);
   assert.equal(checkTaskTransition('lead','develop','terminated',{reason:'范围取消'}).ok, true);

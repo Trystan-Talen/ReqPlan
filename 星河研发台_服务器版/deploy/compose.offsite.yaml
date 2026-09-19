@@ -1,0 +1,12 @@
+# 可选：把第二份备份写到数据卷之外的宿主机目录（建议是另一块磁盘或已挂载的网络存储）。
+# 启用方式：在 .env 中设置
+#   BACKUP_SECONDARY_HOST_DIR=/mnt/backup-disk/xinghe
+#   COMPOSE_FILE=compose.yaml:deploy/compose.offsite.yaml
+# 该目录须预先创建并交给容器内 node 用户（编号 1000）写入：
+#   sudo mkdir -p /mnt/backup-disk/xinghe && sudo chown 1000:1000 /mnt/backup-disk/xinghe && sudo chmod 700 /mnt/backup-disk/xinghe
+services:
+  api:
+    environment:
+      BACKUP_SECONDARY_DIRECTORY: /app/backup-secondary
+    volumes:
+      - ${BACKUP_SECONDARY_HOST_DIR:?请在 .env 中设置 BACKUP_SECONDARY_HOST_DIR（第二备份宿主机目录）}:/app/backup-secondary
