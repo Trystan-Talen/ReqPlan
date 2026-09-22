@@ -134,6 +134,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
       if((match=endpoint.match(/^\/api\/requirements\/([^/]+)\/task-batch$/)) && method==='POST') return json(res,201,business.createTaskBatch(actor,param(match[1]),await readJson(req)));
       if((match=endpoint.match(/^\/api\/projects\/([^/]+)\/schedule\/(preview|apply)$/)) && method==='POST') return json(res,200,business[match[2]==='preview'?'previewSchedule':'applySchedule'](actor,param(match[1]),await readJson(req)));
       if((match=endpoint.match(/^\/api\/attachments\/([^/]+)\/versions$/)) && method==='GET') return json(res,200,{versions:business.listAttachmentVersions(actor,param(match[1]))});
+      if((match=endpoint.match(/^\/api\/tasks\/([^/]+)\/history$/)) && method==='GET') { const id=param(match[1]);business.getTask(actor,id);return json(res,200,{entries:business.listHistory(actor,{entityType:'task',entityId:id,limit:200})}); }
       if((match=endpoint.match(/^\/api\/requirements\/([^/]+)\/history$/)) && method==='GET') return json(res,200,{entries:business.listHistory(actor,{entityType:'requirement',entityId:param(match[1])})});
       if((match=endpoint.match(/^\/api\/requirements\/([^/]+)\/attachments$/))) {
         const id=param(match[1]);

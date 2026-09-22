@@ -93,7 +93,7 @@ export function createBusiness(db) {
     return value.assigneeId === userId || (value.collaboratorIds || []).includes(userId) || all('SELECT data FROM tasks WHERE requirement_id=? AND archived=0', requirementId).some(task => JSON.parse(task.data).ownerId === userId);
   }
   function audit(user, action, type, entityId, projectId, detail = {}) {
-    run('INSERT INTO audit(user_id,action,entity_type,entity_id,detail,created_at) VALUES(?,?,?,?,?,?)', user.id, action, type, entityId, JSON.stringify({ projectId, ...detail }), now());
+    run('INSERT INTO audit(user_id,action,entity_type,entity_id,detail,created_at) VALUES(?,?,?,?,?,?)', user.id, action, type, entityId, JSON.stringify({ projectId, ...detail, actorName: user.name }), now());
   }
   function expectedVersion(row, version) {
     if (!Number.isSafeInteger(version) || version < 1) fail(400, '编辑时必须提交当前版本号', 'VERSION_REQUIRED');
@@ -460,13 +460,18 @@ export function createBusiness(db) {
       if (!transition.ok) fail(transition.status, transition.message, transition.code);
       data.completedAt = taskStage(data.status) === 'done' ? (taskStage(before.status) === 'done' ? before.completedAt || '' : now()) : '';
       const result = updateRow('tasks', row, data); run('UPDATE tasks SET requirement_id=? WHERE id=?', data.requirementId || null, taskId);
-      audit(access.user, before.status === data.status ? 'update' : 'transition', 'task', taskId, data.projectId, { before, after: data }); return result;
+      audit(access.user, before.status === data.status ? 'update' : 'transition', 'task', taskId, data.projectId, { before, after: data, reason: text(input.reason, '操作说明', 1000) }); return result;
     });
   }
   function archiveEntity(actor, entityId, input, type) {
     inputRecord(input, ['version', 'archived']); if (own(input, 'archived') && typeof input.archived !== 'boolean') fail(400, '归档标记必须是布尔值');
-    return transaction(() => { const table = type === 'requirement' ? 'requirements' : 'tasks'; const row = record(table, entityId); const access = permission(actor, row.project_id, type === 'requirement' ? ['product'] : ['lead']); expectedVersion(row, input.version);
+    return transaction(() => { const table = type === 'requirement' ? 'requirements' : 'tasks'; const row = record(table, entityId); const access = permission(actor, row.project_id, type === 'requirement' ? ['product'] : []); expectedVersion(row, input.version);
       const archived = input.archived !== false; const data = JSON.parse(row.data);
+      if (type === 'task' && archived && !row.archived) {
+        const dependents = all('SELECT id,data FROM tasks WHERE project_id=? AND archived=0 AND id<>?', row.project_id, entityId)
+          .filter(task => (JSON.parse(task.data).dependencyIds || []).includes(entityId));
+        if (dependents.length) fail(409, `无法删除或归档：仍有 ${dependents.length} 个任务依赖此任务，请先修改这些任务的前置依赖。`, 'TASK_IN_USE');
+      }
       if (type === 'task' && !archived) validateTask(data, data);
       if (type === 'requirement' && !archived) validateRequirementDependencies({ ...data });
       const result = updateRow(table, row, data, archived); let cascaded = 0;
@@ -503,7 +508,7 @@ export function createBusiness(db) {
     const limit = Math.min(200, Math.max(1, Number(options.limit) || 100));
     // Legacy records have no trusted project column: derive it from the current
     // requirement, and reject conflicting identity claims before exposing detail.
-    const entries = all('SELECT * FROM audit ORDER BY created_at DESC,id DESC').map(row => ({ id: row.id, userId: row.user_id, action: row.action, entityType: row.entity_type, entityId: row.entity_id, detail: JSON.parse(row.detail), createdAt: row.created_at }));
+    const entries = all('SELECT a.*,u.name actor_name FROM audit a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC,a.id DESC').map(row => ({ id: row.id, userId: row.user_id, actorName: JSON.parse(row.detail).actorName || row.actor_name || row.user_id || '系统', action: row.action, entityType: row.entity_type, entityId: row.entity_id, detail: JSON.parse(row.detail), createdAt: row.created_at }));
     const saved = get('SELECT value FROM app_meta WHERE key=?', 'legacy_history');
     let legacy = [];
     try { legacy = saved ? JSON.parse(saved.value) : []; } catch { /* Keep modern history readable if old metadata is malformed. */ }

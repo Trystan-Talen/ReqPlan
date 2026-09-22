@@ -33,3 +33,14 @@
 .task-status-select { min-height: 30px !important; height: 30px; font-size: var(--text-sm) !important; padding: 3px 28px 3px 10px !important; border-radius: var(--radius-sm) !important; background-color: var(--surface-2) !important; }
 .task-review-actions { display: flex; gap: 6px; }
 .task-review-actions .btn { flex: 1; }
+/* Secondary administration actions live in the task detail footer. */
+.task-more { position: relative; }
+.task-more summary { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; cursor: pointer; list-style: none; color: var(--text-2); font-size: var(--text-sm); }
+.task-more summary::-webkit-details-marker { display: none; }
+.task-more summary::before { content: "···"; font-weight: 700; letter-spacing: 2px; }
+.task-more summary:hover, .task-more[open] summary { color: var(--text); }
+.task-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius-xs); }
+.task-more-actions { position: absolute; bottom: calc(100% + 8px); left: 0; min-width: 144px; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-md); white-space: nowrap; }
+
+.task-card-top > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-card-top .points { flex: none; }

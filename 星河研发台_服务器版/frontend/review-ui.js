@@ -23,7 +23,7 @@ export function auditChanges(entry,nameOf = value => value) {
     return [{label:'成员角色',before:roles[detail.before]||detail.before||'未加入',after:roles[detail.after]||detail.after}];
   }
   if (!detail.before || !detail.after || typeof detail.before!=='object' || typeof detail.after!=='object') return [];
-  return Object.entries(fields).filter(([key]) => JSON.stringify(detail.before[key]) !== JSON.stringify(detail.after[key])).map(([key,label]) => ({label,before:valueText(key,detail.before[key],nameOf),after:valueText(key,detail.after[key],nameOf)}));
+  return Object.entries(fields).filter(([key]) => JSON.stringify(detail.before[key]) !== JSON.stringify(detail.after[key])).map(([key,label]) => ({label:entry.entityType==='task'&&key==='description'?'任务内容':label,before:valueText(key,detail.before[key],nameOf),after:valueText(key,detail.after[key],nameOf)}));
 }
 export function renderAuditEntry(entry,{actor='',summary='',stamp='',nameOf} = {}) {
   const changes = auditChanges(entry,nameOf);

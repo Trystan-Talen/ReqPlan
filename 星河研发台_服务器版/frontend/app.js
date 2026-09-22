@@ -8,7 +8,7 @@ import { renderDocumentPreview, renderFeaturePreview } from './document-preview.
 import { renderDocumentsPage, primaryDocumentPanel, renderDocumentReader, renderDocumentVersions, renderRequirementDocuments } from './documents-ui.js';
 import { DOCUMENT_TYPES, isFeature, isMarkdown } from './doc-sections.js';
 import { renderPortfolio, portfolioTimelineContext } from './portfolio.js';
-import { esc, icon, BRAND_MARK, hue, initial, avatarMark, personChip, badge, priority, accountStatus, options, empty, heading, sectionHeading, metric, panel, REQUIRED, field, input, select, area } from './ui-kit.js';
+import { esc, icon, BRAND_MARK, hue, initial, avatarMark, personChip, badge, priority, accountStatus, options, empty, heading, sectionHeading, metric, panel, button, switchToggle, detailList, notice, REQUIRED, field, input, select, area } from './ui-kit.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const encode = value => encodeURIComponent(value);
@@ -26,7 +26,7 @@ const taskStage = value => ({'待开始':'wait','开发中':'develop','测试中
 const REQUEST_STATUS = ['未确定', '待评审', '已确定', '待排期', '已排期', '开发中', '测试中', '已完成', '已终止'];
 const MEMBER_ROLE = ROLE_LABELS;
 const REQUIREMENT_CONTROLS = ['title','description','acceptance','priority','status','assigneeId','collaboratorIds','dependencyIds','estimatePoints','planStart','planEnd','source'];
-const TASK_CONTROLS = ['title','requirementId','ownerId','status','startDate','dueDate','estimateHours','dependencyIds'];
+const TASK_CONTROLS = ['title','description','requirementId','ownerId','status','startDate','dueDate','estimateHours','dependencyIds'];
 const VIEW_LABEL = { portfolio:'全局排期',personal:'我的工作',notifications:'站内提醒',reports:'交付报表',operations:'数据备份',team: '团队工作台', projects: '项目目录', overview: '项目概览', documents: '项目文档', requirements: '需求池', tasks: '研发任务', timeline: '交付排期', members: '项目成员', users: '账号管理', audit: '操作记录' };
 // Project identity colors come from design tokens --project-1…6 (design/tokens.css).
 const COLORS = ['var(--project-1)', 'var(--project-2)', 'var(--project-3)', 'var(--project-4)', 'var(--project-5)', 'var(--project-6)'];
@@ -65,6 +65,7 @@ function canSplit(item) { return !item.archived && (can('assignTasks', item.proj
 function canEditEntity(kind, item) {
   if (!item) return kind === 'tasks' ? canCreateTask() : canEdit();
   const role = projectRole(item.projectId);
+  if (kind === 'tasks' && (item.archived || projectOf(item.projectId)?.archived)) return false;
   if (role === 'admin') return true;
   if (kind === 'tasks') return role === 'lead' || (role === 'developer' && item.ownerId === user.id) || (can('reviewTask', item.projectId) && ['test','done'].includes(taskStage(item.status)));
   return ['product','lead'].includes(role) || (role === 'developer' && participates(item)) || (can('reviewRequirement', item.projectId) && ['测试中','已完成'].includes(item.status));
@@ -104,7 +105,7 @@ function time(value) { if (!value) return '时间未知'; const parsed = new Dat
 function today() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`; }
 function isDone(item) { return taskStage(item.status)==='done'; }
 function overdue(item) { const due = item.dueDate || item.planEnd; return !item.archived && !isDone(item) && taskStage(item.status)!=='terminated' && due && due < today(); }
-function personOptions(current, projectId = route.projectId, roles = null) { const people = projectUsers(projectId).filter(person => !roles || data.memberships.some(item => item.projectId === projectId && item.userId === person.id && roles.includes(item.role))); const currentPerson = data.users.find(item => item.id === current); if (currentPerson && !people.some(item => item.id === current)) people.push(currentPerson); return `<option value="">未分配</option>${people.map(person => `<option value="${esc(person.id)}"${person.id === current ? ' selected' : ''}>${esc(person.name)}</option>`).join('')}`; }
+function personOptions(current, projectId = route.projectId, roles = null) { const people = projectUsers(projectId).filter(person => !roles || data.memberships.some(item => item.projectId === projectId && item.userId === person.id && roles.includes(item.role)) || person.role === 'admin'); const currentPerson = data.users.find(item => item.id === current); if (currentPerson && !people.some(item => item.id === current)) people.push(currentPerson); return `<option value="">未分配</option>${people.map(person => `<option value="${esc(person.id)}"${person.id === current ? ' selected' : ''}>${esc(person.name)}</option>`).join('')}`; }
 function toast(message, error = false) { clearTimeout(toastTimer); $('#toast-region').innerHTML = `<div class="toast${error ? ' error' : ''}">${icon(error ? 'alert' : 'check')}<span>${esc(message)}</span></div>`; toastTimer = setTimeout(() => $('#toast-region').innerHTML = '', 5500); }
 function busy(button, state) { if (!button) return; button.disabled = state; button.setAttribute('aria-busy', String(state)); }
 function presentError(error, container) {
@@ -274,7 +275,7 @@ function overviewView() {
 }
 function filterBar(type, count) {
   const statusValues = type === 'tasks' ? Object.keys(TASK_STATUS) : REQUEST_STATUS;
-  return `<div class="table-toolbar"><div class="table-filters"><select id="status-filter" aria-label="按状态筛选"><option value="all">全部状态</option>${options(statusValues,ui.status,TASK_STATUS)}</select>${type==='requirements'?`<select id="priority-filter" aria-label="按优先级筛选"><option value="all">全部优先级</option>${options(['P0','P1','P2'],ui.priority)}</select>`:''}<label class="archive-toggle"><input id="archive-filter" type="checkbox"${ui.archived?' checked':''}><span>查看归档</span></label></div><div class="table-toolbar-meta"><span class="toolbar-count">${count} 项${ui.search ? '搜索结果' : ''}</span>${type==='tasks'?`<div class="segmented" role="group" aria-label="任务显示方式"><button data-layout="board" aria-pressed="${ui.taskLayout==='board'}" class="${ui.taskLayout==='board'?'active':''}">${icon('board')}看板</button><button data-layout="list" aria-pressed="${ui.taskLayout==='list'}" class="${ui.taskLayout==='list'?'active':''}">${icon('list')}列表</button></div>`:''}</div></div>`;
+  return `<div class="table-toolbar"><div class="table-filters"><select id="status-filter" aria-label="按状态筛选"><option value="all">全部状态</option>${options(statusValues,ui.status,TASK_STATUS)}</select>${type==='requirements'?`<select id="priority-filter" aria-label="按优先级筛选"><option value="all">全部优先级</option>${options(['P0','P1','P2'],ui.priority)}</select>`:''}${switchToggle('archive-filter',type==='tasks'?'查看已删除 / 归档':'查看归档',ui.archived)}</div><div class="table-toolbar-meta"><span class="toolbar-count">${count} 项${ui.search ? '搜索结果' : ''}</span>${type==='tasks'?`<div class="segmented" role="group" aria-label="任务显示方式"><button data-layout="board" aria-pressed="${ui.taskLayout==='board'}" class="${ui.taskLayout==='board'?'active':''}">${icon('board')}看板</button><button data-layout="list" aria-pressed="${ui.taskLayout==='list'}" class="${ui.taskLayout==='list'?'active':''}">${icon('list')}列表</button></div>`:''}</div></div>`;
 }
 function filtered(type) { return scoped(type).filter(item => Boolean(item.archived) === ui.archived && matches(item) && (ui.status==='all'||(type==='tasks'?taskStage(item.status):item.status)===ui.status) && (type==='tasks'||ui.priority==='all'||item.priority===ui.priority)); }
 function footer(count) { const pages=Math.max(1,Math.ceil(count/25)); ui.page=Math.min(ui.page,pages); return `<div class="table-footer"><span>共 ${count} 项</span><div class="pagination"><button class="btn btn-small btn-secondary" data-page="${ui.page-1}"${ui.page===1?' disabled':''}>上一页</button><span>${ui.page} / ${pages}</span><button class="btn btn-small btn-secondary" data-page="${ui.page+1}"${ui.page===pages?' disabled':''}>下一页</button></div></div>`; }
@@ -299,10 +300,19 @@ function reviewButtons(kind,item) {
   if (!['tasks','requirements'].includes(kind)||item.archived||!can(kind==='tasks'?'reviewTask':'reviewRequirement',item.projectId)||(kind==='tasks'&&item.ownerId===user.id&&!['lead','admin'].includes(role))||taskStage(item.status)!=='test') return '';
   return `<button type="button" class="btn btn-small btn-secondary" data-review-kind="${kind}" data-review-id="${esc(item.id)}" data-review-status="${kind==='tasks'?'develop':'开发中'}">退回开发</button><button type="button" class="btn btn-small btn-primary" data-review-kind="${kind}" data-review-id="${esc(item.id)}" data-review-status="${kind==='tasks'?'done':'已完成'}">通过验收</button>`;
 }
+function taskRemovalButton(task) {
+  if (!can('deleteTask',task.projectId) || projectOf(task.projectId)?.archived) return '';
+  return button({label:task.archived?'恢复任务':'删除任务',variant:task.archived?'text':'danger-text',data:{archiveKind:'tasks',archiveId:task.id}});
+}
+function taskMoreMenu(task) {
+  const removal=taskRemovalButton(task);
+  return removal?`<details class="task-more" id="task-more"><summary aria-label="更多任务操作">更多</summary><div class="task-more-actions">${removal}</div></details>`:'';
+}
+
 function taskCard(task) { const request=data.requirements.find(item=>item.id===task.requirementId), late=overdue(task); return `<article class="task-card${late?' is-overdue':''}"><div class="task-card-top"><span>${esc(task.id)}</span><span class="points">${Number(task.estimateHours||0)} 小时</span></div><button class="task-card-title" data-task="${esc(task.id)}">${esc(task.title)}</button>${request?`<div class="task-request">${icon('link')}<span>${esc(request.title)}</span></div>`:''}<div class="task-card-footer"><span class="owner">${person(task.ownerId)}</span><span class="due ${late?'overdue-text':'muted'}">${task.dueDate?date(task.dueDate):'未排期'}${late?' · 逾期':''}</span></div>${canEditEntity('tasks',task)&&!task.archived?`<select class="task-status-select" data-task-status="${esc(task.id)}" aria-label="${esc(task.title)}的状态">${taskOptions(task.status,task.projectId,task)}</select>`:''}${reviewButtons('tasks',task)?`<div class="task-review-actions">${reviewButtons('tasks',task)}</div>`:''}</article>`; }
 function tasksView() {
   const list = filtered('tasks');
-  const table = `<div class="table-wrap"><table class="data-table"><thead><tr><th>任务</th><th>负责人</th><th>状态</th><th>预估工时</th><th>开始 / 截止</th><th><span class="sr-only">操作</span></th></tr></thead><tbody>${list.map(task=>`<tr><td class="title-cell"><button class="item-title" data-task="${esc(task.id)}">${esc(task.title)}</button><div class="item-meta task-requirement-summary"><code>${esc(task.id)}</code><span>${esc(data.requirements.find(item=>item.id===task.requirementId)?.title || '未关联需求')}</span></div></td><td>${person(task.ownerId)}</td><td>${badge(task.status)}</td><td class="num-cell">${Number(task.estimateHours||0)} 小时</td><td class="${overdue(task)?'overdue-text':''}">${date(task.startDate)} — ${date(task.dueDate)}</td><td class="action-cell"><button class="text-button" data-task="${esc(task.id)}">${canEditEntity('tasks',task)?'编辑':'查看'}</button></td></tr>`).join('')}</tbody></table></div>`;
+  const table = `<div class="table-wrap"><table class="data-table"><thead><tr><th>任务</th><th>负责人</th><th>状态</th><th>预估工时</th><th>开始 / 截止</th></tr></thead><tbody>${list.map(task=>`<tr><td class="title-cell"><button class="item-title" data-task="${esc(task.id)}">${esc(task.title)}</button><div class="item-meta task-requirement-summary"><code>${esc(task.id)}</code><span>${esc(data.requirements.find(item=>item.id===task.requirementId)?.title || '未关联需求')}</span></div></td><td>${person(task.ownerId)}</td><td>${badge(task.status)}</td><td class="num-cell">${Number(task.estimateHours||0)} 小时</td><td class="${overdue(task)?'overdue-text':''}">${date(task.startDate)} — ${date(task.dueDate)}</td></tr>`).join('')}</tbody></table></div>`;
   const stages=Object.entries(TASK_STATUS).filter(([value])=>value!=='terminated'||list.some(item=>taskStage(item.status)==='terminated'));
   const board=`<div class="board">${stages.map(([value])=>{const items=list.filter(task=>taskStage(task.status)===value);return `<section class="board-column" data-stage="${value}"><div class="board-heading">${badge(value)}<span class="board-count">${items.length}</span></div>${items.map(taskCard).join('')||'<div class="board-empty">暂无任务</div>'}${canCreateTask()&&!ui.archived&&value==='wait'?`<button class="board-add text-button" data-new-task-status="${value}">${icon('plus')} 添加任务</button>`:''}</section>`;}).join('')}</div>`;
   return heading('研发任务','由主开发把需求拆成可交付的工作，明确负责人、状态与时间。',canCreateTask()?'<button class="btn btn-primary" data-action="new-task">'+icon('plus')+' 新建任务</button>':'',projectOf().name)+readonly('tasks')+(ui.taskLayout==='board'?`<section class="panel">${filterBar('tasks',list.length)}</section>${list.length?board:`<section class="panel">${empty('暂无符合条件的任务','调整筛选条件，或创建项目任务。')}</section>`}`:`<section class="panel">${filterBar('tasks',list.length)}${list.length?table:empty('暂无符合条件的任务','调整筛选条件，或创建项目任务。')}</section>`);
@@ -326,7 +336,8 @@ function timelineWidth() {
   const scroller = $('.schedule-scroll'), name = scroller && $('.schedule-chart .schedule-name', scroller);
   if (scroller?.clientWidth > 0 && name?.offsetWidth > 0) return scroller.clientWidth - name.offsetWidth;
   const view = $('#view')?.clientWidth, narrow = typeof matchMedia === 'function' && matchMedia('(max-width: 900px)').matches;
-  return view > 0 ? view - 2 - (narrow ? 160 : 240) : 900;
+  const nameWidth = route.view === 'portfolio' ? (narrow ? 190 : 280) : (narrow ? 160 : 240);
+  return view > 0 ? Math.max(1, view - 2 - nameWidth) : 900;
 }
 function timelineGeometry(scroller) {
   const chart = scroller && $('.schedule-chart', scroller);
@@ -447,7 +458,7 @@ async function auditView() { $('#view').innerHTML=heading('操作记录','查看
 function historyRow(entry) {
   const labels={create:'创建',update:'修改',transition:'状态流转',archive:'归档',restore:'恢复',upload:'上传附件',set_member:'设置成员角色',remove_member:'移出成员',legacy_import:'导入原项目','auth.login':'登录','auth.logout':'退出登录','auth.login_failed':'登录失败','account.create':'创建账号','account.update':'修改账号','account.bootstrap_admin':'初始化管理员','account.issue_activation':'生成激活链接','account.issue_reset':'生成重置链接','account.activate':'激活账号','account.password_change':'修改密码','account.password_reset':'重置密码','account.cli_password_reset':'通过服务器终端重置密码','membership.set':'设置项目成员','membership.remove':'移出项目成员','schema.role_migration':'角色迁移'};
   const types={project:'项目',requirement:'需求',task:'任务',attachment:'附件',user:'账号',workspace:'团队',authentication:'身份验证'};
-  const action=labels[entry.action] || '业务更新';
+  const action=entry.entityType==='task'&&entry.action==='archive'?'删除 / 归档':labels[entry.action] || '业务更新';
   const target=data.projects.find(item=>item.id===entry.entityId)?.name || [...data.requirements,...data.tasks].find(item=>item.id===entry.entityId)?.title || data.users.find(item=>item.id===entry.entityId)?.name || entry.entityId || '';
   const actor=entry.actorName || ((entry.actorId||entry.userId)?nameOf(entry.actorId||entry.userId):'系统');
   return renderAuditEntry(entry,{actor,stamp:time(entry.at||entry.createdAt||entry.timestamp),summary:entry.summary||entry.message||entry.description||(typeof entry.detail==='string'?entry.detail:`${action} · ${types[entry.entityType]||'记录'} ${target}`),nameOf});
@@ -460,7 +471,14 @@ function renderView() {
   if(route.view==='audit'){auditView();return;}
   if(['personal','notifications','reports','operations'].includes(route.view)){workView();return;}
   $('#view').innerHTML=({team:()=>teamView(false),projects:()=>teamView(true),portfolio:portfolioView,overview:overviewView,documents:documentsView,requirements:requirementsView,tasks:tasksView,timeline:timelineView,members:membersView,users:usersView}[route.view]||(()=>teamView(false)))();
-  if(['timeline','portfolio'].includes(route.view))positionTimeline();
+  if(['timeline','portfolio'].includes(route.view)) {
+    // Measure the rendered chart: first entry, a different chart type and scrollbars
+    // can all change the available date-track width.
+    const geometry=timelineGeometry($('.schedule-scroll'));
+    if(geometry && Math.abs(geometry.fitPx*geometry.days-geometry.width)>1)
+      $('#view').innerHTML=route.view==='portfolio'?portfolioView():timelineView();
+    positionTimeline();
+  }
 }
 
 let workViewGeneration = 0, workSnapshot = null;
@@ -503,8 +521,8 @@ function openDialog(title, body, footer='', variant='drawer') {
   requestAnimationFrame(()=>($('[autofocus]',dialog)||$('input,select,button',dialog))?.focus());
 }
 function formDialog(title,kind,id,fields,extra='',item=null,editable=true) {
-  const archive=item&&editable&&(kind==='projects'?canManage(item.id):kind==='tasks'?can('assignTasks',item.projectId):canEdit(item.projectId))?`<button type="button" class="text-button danger" data-archive-kind="${kind}" data-archive-id="${esc(id)}">${icon('archive')} ${item.archived?'恢复':'归档'}</button>`:'';
-  openDialog(title,`<form id="entity-form" data-kind="${kind}" data-id="${esc(id||'')}"><div class="dialog-body"><div id="form-error" class="form-error server-error" role="alert" tabindex="-1" hidden></div>${item?.archived?'<div class="notice notice-info">这条记录已归档。恢复后可重新纳入工作范围。</div>':''}<div class="form-grid">${fields}</div>${extra}</div><div class="dialog-footer">${archive}<div class="footer-buttons"><button type="button" class="btn btn-secondary" data-action="close-dialog">${editable?'取消':'关闭'}</button>${editable?'<button type="submit" class="btn btn-primary">保存</button>':''}${item?reviewButtons(kind,item):''}</div></div></form>`);
+  const archive=kind!=='tasks'&&item&&editable&&(kind==='projects'?canManage(item.id):canEdit(item.projectId))?`<button type="button" class="text-button danger" data-archive-kind="${kind}" data-archive-id="${esc(id)}">${icon('archive')} ${item.archived?'恢复':'归档'}</button>`:'';
+  openDialog(title,`<form id="entity-form" data-kind="${kind}" data-id="${esc(id||'')}"><div class="dialog-body"><div id="form-error" class="form-error server-error" role="alert" tabindex="-1" hidden></div>${item?.archived?'<div class="notice notice-info">'+(kind==='tasks'?'此任务已删除或归档，恢复后可重新编辑。':'这条记录已归档。恢复后可重新纳入工作范围。')+'</div>':''}<div class="form-grid">${fields}</div>${extra}</div><div class="dialog-footer">${archive}<div class="footer-buttons"><button type="button" class="btn btn-secondary" data-action="close-dialog">${editable?'取消':'关闭'}</button>${editable?'<button type="submit" class="btn btn-primary">保存</button>':''}${item?reviewButtons(kind,item):''}</div></div></form>`);
   if(!editable)for(const control of dialog.querySelectorAll('input,textarea,select'))control.disabled=true;
 }
 function editProject(id='') {
@@ -527,7 +545,7 @@ function editTask(id='',preset={}) {
   const item=id?data.tasks.find(task=>task.id===id):null;
   const projectId=item?.projectId||preset.projectId||route.projectId;
   const editable=item?canEditEntity('tasks',item):canCreateTask(projectId), reqs=data.requirements.filter(req=>req.projectId===projectId&&(item?(!req.archived||req.id===item.requirementId):canSplit(req)));
-  const fields=[field('任务标题 <span class="required">*</span>','title',input('title',item?.title||'','required maxlength="200" autofocus'),true),field('关联需求 <span class="required">*</span>','requirementId',select('requirementId',(item&&!item.requirementId?'<option value="">未关联需求</option>':'<option value="">选择需求</option>')+reqs.map(req=>`<option value="${esc(req.id)}"${(item?.requirementId||preset.requirementId)===req.id?' selected':''}>${esc(req.title)}</option>`).join('')),true),field('负责人','ownerId',select('ownerId',personOptions(item?.ownerId||(can('assignTasks',projectId)?'':user.id),projectId))),field('任务状态','status',select('status',item?taskOptions(item.status,projectId,item):options(['wait'],'wait',TASK_STATUS))),field('开始日期','startDate',input('startDate',item?.startDate||'','type="date"')),field('截止日期','dueDate',input('dueDate',item?.dueDate||'','type="date"')),field('预估工时','estimateHours',input('estimateHours',item?.estimateHours??0,'type="number" min="0" max="100000" step="0.5"'),true,'按小时填写；与需求点数分别统计。已完成状态由测试或主开发确认。'),`<fieldset class="form-field full-width collaborator-field"><legend>前置任务</legend><p class="field-help">前置任务全部完成后才可开始开发；不能依赖自己或形成循环。</p><div class="checklist dependency-list">${data.tasks.filter(task=>task.projectId===projectId&&task.id!==item?.id&&(!task.archived||(item?.dependencyIds||[]).includes(task.id))).map(task=>`<label><input type="checkbox" name="dependencyIds" value="${esc(task.id)}"${item?.dependencyIds?.includes(task.id)?' checked':''}><span>${esc(task.title)} · ${esc(TASK_STATUS[taskStage(task.status)]||task.status)}${task.archived?'（已归档）':''}</span></label>`).join('')||'<span class="muted small">暂无其他任务</span>'}</div></fieldset>`].join('');
+  const fields=[field('任务标题 <span class="required">*</span>','title',input('title',item?.title||'','required maxlength="200" autofocus'),true),field('任务内容','description',area('description',item?.description||'','rows="4" maxlength="20000" placeholder="说明具体工作、交付内容与完成要求"'),true),field('关联需求 <span class="required">*</span>','requirementId',select('requirementId',(item&&!item.requirementId?'<option value="">未关联需求</option>':'<option value="">选择需求</option>')+reqs.map(req=>`<option value="${esc(req.id)}"${(item?.requirementId||preset.requirementId)===req.id?' selected':''}>${esc(req.title)}</option>`).join('')),true),field('负责人','ownerId',select('ownerId',personOptions(item?.ownerId||(can('assignTasks',projectId)?'':user.id),projectId,['lead','developer'])),false,can('assignTasks',projectId)?'可分派给自己或本项目其他开发成员。':'任务转派由主开发负责。'),field('任务状态','status',select('status',item?taskOptions(item.status,projectId,item):options(['wait'],'wait',TASK_STATUS))),field('开始日期','startDate',input('startDate',item?.startDate||'','type="date"')),field('截止日期','dueDate',input('dueDate',item?.dueDate||'','type="date"')),field('预估工时','estimateHours',input('estimateHours',item?.estimateHours??0,'type="number" min="0" max="100000" step="0.5"'),true,'按小时填写；与需求点数分别统计。已完成状态由测试或主开发确认。'),`<fieldset class="form-field full-width collaborator-field"><legend>前置任务</legend><p class="field-help">前置任务全部完成后才可开始开发；不能依赖自己或形成循环。</p><div class="checklist dependency-list">${data.tasks.filter(task=>task.projectId===projectId&&task.id!==item?.id&&(!task.archived||(item?.dependencyIds||[]).includes(task.id))).map(task=>`<label><input type="checkbox" name="dependencyIds" value="${esc(task.id)}"${item?.dependencyIds?.includes(task.id)?' checked':''}><span>${esc(task.title)} · ${esc(TASK_STATUS[taskStage(task.status)]||task.status)}${task.archived?'（已归档）':''}</span></label>`).join('')||'<span class="muted small">暂无其他任务</span>'}</div></fieldset>`].join('');
   formDialog(item?(editable?'编辑任务':'任务详情'):'新建任务','tasks',id,fields+(item?field('流转说明','reason',area('reason','','rows="2" maxlength="1000"'),true,'终止时需由主开发填写原因。'):''),'',item,editable);
   $('#entity-form').dataset.projectId=projectId;
   if(editable) lockFields('tasks',item,projectId);
@@ -544,6 +562,27 @@ async function requirementDetails(id) {
   if(attachments.status==='fulfilled') {const files=rows(attachments.value,'attachments');files.forEach(file=>attachmentMeta.set(file.id,file));$('#attachment-list').innerHTML=files.map(file=>`<div class="attachment-item">${icon('document')}<span>${esc(file.name)} <small class="badge">版本 ${file.version}</small>${file.size?`<small class="item-meta">${Math.ceil(file.size/1024)} 千字节</small>`:''}</span><div class="attachment-actions"><button class="text-button" data-attachment-history="${esc(file.id)}">历史版本</button><button class="text-button" data-preview-attachment="${esc(file.id)}">查看</button><button class="text-button" data-download-attachment="${esc(file.id)}">下载</button></div></div>`).join('')||'<p class="muted small">暂无附件。</p>';}else $('#attachment-list').innerHTML=`<p class="overdue-text small">${esc(attachments.reason.message)}</p>`;
   if(history.status==='fulfilled')$('#requirement-history').innerHTML=rows(history.value,'entries').map(historyRow).join('')||'<p class="muted small">暂无变更记录。</p>';else $('#requirement-history').innerHTML=`<p class="overdue-text small">${esc(history.reason.message)}</p>`;
 }
+async function showTask(id) {
+  const item=data.tasks.find(task=>task.id===id); if(!item)throw new Error('任务不存在，请重新载入。');
+  const requirement=data.requirements.find(req=>req.id===item.requirementId);
+  const dependencies=(item.dependencyIds||[]).map(key=>data.tasks.find(task=>task.id===key)?.title||key).join('、');
+  openDialog('任务详情',`<div class="dialog-body"><div class="detail-hero"><span class="detail-hero-id">${esc(item.id)} · ${esc(projectOf(item.projectId)?.name||'')}</span><h3>${esc(item.title)}</h3><div class="detail-summary">${badge(item.status)}</div></div>${item.archived?notice('此任务已删除或归档，系统管理员恢复后可继续编辑。'):''}${detailList([
+    ['负责人',person(item.ownerId),true],['关联需求',requirement?.title||'未关联需求'],
+    ['开始日期',date(item.startDate)],['截止日期',date(item.dueDate)],
+    ['预估工时',`${Number(item.estimateHours||0)} 小时`],['前置任务',dependencies||'无'],
+    ['创建人',item.createdBy?nameOf(item.createdBy):'未记录'],['创建时间',item.createdAt?time(item.createdAt):'未记录']
+  ])}<section class="detail-section"><h3>任务内容</h3><p class="detail-copy">${esc(item.description||'尚未填写')}</p></section><section class="detail-section"><h3>修改记录</h3><p class="field-help">显示最近 200 条记录，包含操作人、时间及修改前后内容。</p><div id="task-history" class="history-list"><p class="muted small">正在读取记录…</p></div></section></div>`,
+    taskMoreMenu(item)+`<div class="footer-buttons">${button({label:'关闭',action:'close-dialog'})}${canEditEntity('tasks',item)?button({label:editableFields('tasks',item,item.projectId)?.length===1?'处理任务':'编辑任务',variant:'primary',iconName:'edit',data:{editTask:id}}):''}</div>`);
+  const target=$('#task-history',dialog);
+  try {
+    const result=await api(`/tasks/${encode(id)}/history`);
+    if(!dialog.open || $('#task-history',dialog)!==target)return;
+    target.innerHTML=rows(result,'entries').map(historyRow).join('')||'<p class="muted small">暂无修改记录；早期未记录的操作不会补造。</p>';
+  } catch(error) {
+    if(dialog.open && $('#task-history',dialog)===target)target.innerHTML=notice(error.message,'danger')+button({label:'重新读取',variant:'text',data:{task:id}});
+  }
+}
+
 async function attachment(id,download=false) {
   try {
     const response=await fetch(`/api/attachments/${encode(id)}`,{credentials:'same-origin'});
@@ -674,12 +713,12 @@ function showToken(result,title='一次性账号链接') {
 function passwordDialog() {
   openDialog('修改我的密码',`<form id="password-form"><div class="dialog-body"><p class="form-intro">修改后所有登录会话都会失效，请使用新密码重新登录。</p><div id="form-error" class="form-error" role="alert" tabindex="-1" hidden></div><div class="form-grid">${field('当前密码','currentPassword',input('currentPassword','','type="password" autocomplete="current-password" required autofocus'),true)}${field('新密码','newPassword',input('newPassword','','type="password" autocomplete="new-password" required minlength="6" maxlength="128"'),true)}${field('确认新密码','confirmPassword',input('confirmPassword','','type="password" autocomplete="new-password" required minlength="6" maxlength="128"'),true)}</div><p class="password-rules is-spaced">密码至少 6 个字符。</p></div><div class="dialog-footer"><button type="button" class="btn btn-secondary" data-action="close-dialog">取消</button><button type="submit" class="btn btn-primary">确认修改</button></div></form>`,'','center');
 }
-function confirmAction(title,message,action,attributes='') { openDialog(title,`<div class="dialog-body"><p>${esc(message)}</p><div id="form-error" class="form-error" role="alert" tabindex="-1" hidden></div></div>`,`<button class="btn btn-secondary" data-action="close-dialog">取消</button><button class="btn btn-primary" data-action="${action}" ${attributes}>确认</button>`,'center'); }
+function confirmAction(title,message,action,attributes='',label='确认') { openDialog(title,`<div class="dialog-body"><p>${esc(message)}</p><div id="form-error" class="form-error" role="alert" tabindex="-1" hidden></div></div>`,`<button class="btn btn-secondary" data-action="close-dialog">取消</button><button class="btn btn-primary" data-action="${action}" ${attributes}>${esc(label)}</button>`,'center'); }
 async function saveEntity(form) {
   const kind=form.dataset.kind,id=form.dataset.id,values=Object.fromEntries(new FormData(form)),item=id?data[kind].find(record=>record.id===id):null;
   let payload;
   if(kind==='requirements')payload={title:values.title,description:values.description,acceptance:values.acceptance,priority:values.priority,status:values.status,assigneeId:values.assigneeId||null,collaboratorIds:new FormData(form).getAll('collaboratorIds'),dependencyIds:new FormData(form).getAll('dependencyIds'),estimatePoints:Number(values.estimatePoints),planStart:values.planStart||'',planEnd:values.planEnd||'',source:values.source,...(!item?{projectId:form.dataset.projectId,ownerId:user.id}:{})};
-  if(kind==='tasks')payload={title:values.title,requirementId:values.requirementId||null,ownerId:values.ownerId||null,status:item&&(!values.status||taskStage(item.status)===values.status)?item.status:values.status,startDate:values.startDate||'',dueDate:values.dueDate||'',estimateHours:Number(values.estimateHours),dependencyIds:new FormData(form).getAll('dependencyIds'),...(!item?{projectId:form.dataset.projectId}:{})};
+  if(kind==='tasks')payload={title:values.title,description:values.description,requirementId:values.requirementId||null,ownerId:values.ownerId||null,status:item&&(!values.status||taskStage(item.status)===values.status)?item.status:values.status,startDate:values.startDate||'',dueDate:values.dueDate||'',estimateHours:Number(values.estimateHours),dependencyIds:new FormData(form).getAll('dependencyIds'),...(!item?{projectId:form.dataset.projectId}:{})};
   if(kind==='projects') {
     const milestones=values.milestones.split('\n').map(line=>line.trim()).filter(Boolean).map((line,index)=>{const split=line.lastIndexOf('|');if(split<1)throw new Error(`第 ${index+1} 个里程碑需使用「名称 | 年-月-日」。`);const name=line.slice(0,split).trim(),day=line.slice(split+1).trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new Error(`第 ${index+1} 个里程碑的日期格式不正确。`);const old=(item?.milestones||[]).find(m=>(m.label||m.name)===name);return {label:name,date:day,kind:old?.kind||'checkpoint'};});
     payload={name:values.name,description:values.description,ownerId:values.ownerId||null,status:values.status,startDate:values.startDate||'',targetDate:values.targetDate||'',milestones,...(!item&&values.ownerRole?{ownerRole:values.ownerRole}:{})};
@@ -696,11 +735,12 @@ async function saveEntity(form) {
   if(kind==='users'&&id===user.id)user=result.user||result;
   if(kind==='users'&&!id){if(result.user)data.users.push(result.user);renderShell();showToken(result,'新账号激活链接');return;}
   await reload();renderShell();toast(item?'修改已保存。':'创建成功。');
+  if(kind==='tasks'&&id)await showTask(id);
   if(kind==='projects'&&!id){const project=result.project||result;if(project.id)location.hash=projectPath(project.id);}
 }
 
 // Drag the schedule chart to pan (bounded by the project's scheduled dates); a drag never opens the task under the pointer.
-document.addEventListener('pointerdown',event=>{const scroller=event.target.closest?.('.schedule-scroll');if(!scroller||scroller.classList.contains('is-fit')||event.button!==0||event.pointerType==='touch'||event.target.closest('.schedule-name,select,input'))return;timelineDrag={scroller,x:event.clientX,left:scroller.scrollLeft,id:event.pointerId,moved:false};});
+document.addEventListener('pointerdown',event=>{const scroller=event.target.closest?.('.schedule-scroll');if(!scroller||scroller.scrollWidth<=scroller.clientWidth+1||event.button!==0||event.pointerType==='touch'||event.target.closest('.schedule-name,select,input'))return;timelineDrag={scroller,x:event.clientX,left:scroller.scrollLeft,id:event.pointerId,moved:false};});
 document.addEventListener('pointermove',event=>{const drag=timelineDrag;if(!drag||event.pointerId!==drag.id)return;const dx=event.clientX-drag.x;if(!drag.moved){if(Math.abs(dx)<5)return;drag.moved=true;drag.scroller.classList.add('is-dragging');try{drag.scroller.setPointerCapture(event.pointerId);}catch(_){}}drag.scroller.scrollLeft=drag.left-dx;});
 function endTimelineDrag(event){const drag=timelineDrag;if(!drag||event.pointerId!==drag.id)return;timelineDrag=null;drag.scroller.classList.remove('is-dragging');if(drag.moved){timelineDragged=true;setTimeout(()=>{timelineDragged=false;},80);}}
 document.addEventListener('pointerup',endTimelineDrag);
@@ -708,7 +748,7 @@ document.addEventListener('pointercancel',endTimelineDrag);
 document.addEventListener('scroll',event=>{const scroller=event.target;if(!scroller?.classList?.contains('schedule-scroll'))return;const geometry=timelineGeometry(scroller);if(geometry){syncTimelineChrome(geometry);rememberTimeline(geometry);}},true);
 document.addEventListener('wheel',event=>{const scroller=event.target.closest?.('.schedule-scroll');if(!scroller||!(event.ctrlKey||event.metaKey))return;event.preventDefault();const geometry=timelineGeometry(scroller);if(!geometry)return;const offset=Math.max(0,Math.min(geometry.width,event.clientX-scroller.getBoundingClientRect().left-geometry.nameWidth));if(!timelineWheel){timelineWheel={factor:1,offset};setTimeout(()=>{const pending=timelineWheel;timelineWheel=null;zoomTimeline(pending.factor,pending.offset);},70);}timelineWheel.factor*=Math.exp(-event.deltaY*.01);timelineWheel.offset=offset;},{passive:false});
 let timelineResizeTimer=0;
-window.addEventListener('resize',()=>{if(route.view!=='timeline')return;clearTimeout(timelineResizeTimer);timelineResizeTimer=setTimeout(()=>{if(route.view==='timeline')renderView();},150);});
+window.addEventListener('resize',()=>{if(!['timeline','portfolio'].includes(route.view))return;clearTimeout(timelineResizeTimer);timelineResizeTimer=setTimeout(()=>{if(['timeline','portfolio'].includes(route.view))renderView();},150);});
 document.addEventListener('submit',async event=>{
   const form=event.target;if(!(form instanceof HTMLFormElement))return;
   const known=['auth-form','entity-form','password-form','member-form','attachment-form','task-batch-form','schedule-batch-form','document-form'];if(!known.includes(form.id))return;
@@ -771,6 +811,7 @@ document.addEventListener('submit',async event=>{
   finally{busy(button,false);}
 });
 document.addEventListener('click',async event=>{
+  if($('#task-more')?.open&&!event.target.closest?.('.task-more'))$('#task-more').open=false;
   if(timelineDragged&&event.target.closest?.('.schedule-scroll')){timelineDragged=false;return;}
   if(!event.target.closest?.('.project-switcher'))setProjectMenu(false);
   const button=event.target.closest('button,[data-action]');if(!button||button.disabled)return;
@@ -828,7 +869,8 @@ document.addEventListener('click',async event=>{
     if(button.dataset.portfolioExpand){const expanded=new Set();if(button.dataset.portfolioExpand==='all'){for(const project of data.projects)expanded.add('p:'+project.id);for(const item of data.requirements)expanded.add('r:'+item.id);}portfolioUi={...portfolioUi,expanded};renderView();return;}
     if(button.dataset.requirement){await requirementDetails(button.dataset.requirement);return;}
     if(button.dataset.editRequirement){editRequirement(button.dataset.editRequirement);return;}
-    if(button.dataset.task){editTask(button.dataset.task);return;}
+    if(button.dataset.editTask){editTask(button.dataset.editTask);return;}
+    if(button.dataset.task){await showTask(button.dataset.task);return;}
     if(button.dataset.newTaskStatus){editTask('',{status:button.dataset.newTaskStatus});return;}
     if(button.dataset.linkedTask){const req=data.requirements.find(item=>item.id===button.dataset.linkedTask);editTask('',{projectId:req.projectId,requirementId:req.id});return;}
     if(button.dataset.editUser){editUser(button.dataset.editUser);return;}
@@ -846,8 +888,14 @@ document.addEventListener('click',async event=>{
     if(action==='copy-token'){const input=$('#one-time-link');try{await navigator.clipboard.writeText(input.value);toast('链接已复制，请手动交付本人。');}catch(_){input.focus();input.select();toast('请使用系统复制快捷键复制已选中的链接。');}return;}
     if(button.dataset.removeMember){confirmAction('移出项目成员',`将「${nameOf(button.dataset.removeMember)}」移出当前项目。此操作不会删除团队账号。`,'confirm-remove-member',`data-user-id="${esc(button.dataset.removeMember)}"`);return;}
     if(action==='confirm-remove-member'){busy(button,true);await api(`/projects/${encode(route.projectId)}/members/${encode(button.dataset.userId)}`,{method:'DELETE',body:{version:projectOf().version}});closeDialog();await reload();renderShell();toast('成员已移出项目。');return;}
-    if(button.dataset.archiveKind){const kind=button.dataset.archiveKind,id=button.dataset.archiveId,item=data[kind].find(record=>record.id===id);confirmAction(item.archived?'恢复记录':'归档记录',`${item.archived?'恢复':'归档'}「${item.name||item.title}」。${item.archived?'恢复后重新显示在当前工作范围。':'归档内容可通过「查看归档」筛选恢复。'}`,'confirm-archive',`data-kind="${kind}" data-id="${esc(id)}"`);return;}
-    if(action==='confirm-archive'){busy(button,true);const item=data[button.dataset.kind].find(record=>record.id===button.dataset.id);await api(`/${button.dataset.kind}/${encode(item.id)}`,{method:'PATCH',body:{version:item.version,archived:!item.archived}});closeDialog();await reload();if(button.dataset.kind==='projects'){location.hash='#/projects';readRoute();}renderShell();toast(item.archived?'记录已恢复。':'记录已归档。');return;}
+    if(button.dataset.archiveKind){const kind=button.dataset.archiveKind,id=button.dataset.archiveId,item=data[kind].find(record=>record.id===id);
+      if(kind==='tasks') {
+        if(!can('deleteTask',item.projectId))throw new Error('只有系统管理员可以删除或恢复任务。');
+        const label=item.archived?'恢复任务':'删除任务';
+        confirmAction(label,`${item.archived?'恢复':'删除'}「${item.title}」。${item.archived?'恢复后重新显示在研发任务中，可继续编辑与分派。':'删除后移出当前看板与排期，内容和历史记录保留，可通过「查看已删除 / 归档」恢复。'}`,'confirm-archive',`data-kind="tasks" data-id="${esc(id)}" data-version="${item.version}" data-archived="${!item.archived}"`,label);return;
+      }
+      confirmAction(item.archived?'恢复记录':'归档记录',`${item.archived?'恢复':'归档'}「${item.name||item.title}」。${item.archived?'恢复后重新显示在当前工作范围。':'归档内容可通过「查看归档」筛选恢复。'}`,'confirm-archive',`data-kind="${kind}" data-id="${esc(id)}"`);return;}
+    if(action==='confirm-archive'){busy(button,true);const item=data[button.dataset.kind].find(record=>record.id===button.dataset.id);await api(`/${button.dataset.kind}/${encode(item.id)}`,{method:'PATCH',body:{version:button.dataset.version?Number(button.dataset.version):item.version,archived:button.dataset.archived?button.dataset.archived==='true':!item.archived}});closeDialog();await reload();if(button.dataset.kind==='projects'){location.hash='#/projects';readRoute();}renderShell();toast(button.dataset.kind==='tasks'?(item.archived?'任务已恢复。':'任务已删除，可在「查看已删除 / 归档」中恢复。'):(item.archived?'记录已恢复。':'记录已归档。'));return;}
     if(button.dataset.reviewKind==='requirements'&&button.dataset.reviewStatus==='开发中'){editRequirement(button.dataset.reviewId);$('#field-status').value='开发中';$('#field-reason')?.focus();toast('请填写退回开发的原因后保存。');return;}
     if(button.dataset.reviewKind){busy(button,true);const item=data[button.dataset.reviewKind].find(record=>record.id===button.dataset.reviewId);await api(`/${button.dataset.reviewKind}/${encode(item.id)}`,{method:'PATCH',body:{version:item.version,status:button.dataset.reviewStatus}});closeDialog();await reload();renderShell();toast(button.dataset.reviewStatus==='done'||button.dataset.reviewStatus==='已完成'?'已通过验收。':'已退回开发。');return;}
     if(button.dataset.previewAttachment){await attachment(button.dataset.previewAttachment);return;}if(button.dataset.downloadAttachment){await attachment(button.dataset.downloadAttachment,true);return;}
@@ -874,7 +922,7 @@ dialog.addEventListener('cancel',event=>{event.preventDefault();closeDialog();})
 dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeDialog();}});
 setInterval(autoRefresh, AUTO_REFRESH_MS);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - lastSynced > 30_000) autoRefresh(); });
-document.addEventListener('keydown',event=>{if(!$('#project-menu')?.hidden&&projectMenuKey(event))return;if(event.key==='Escape'){document.body.classList.remove('menu-open');if($('#sidebar-shade'))$('#sidebar-shade').hidden=true;}if(event.key==='/'&&!dialog.open&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){event.preventDefault();$('#search')?.focus();}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('#task-more')?.open){event.preventDefault();$('#task-more').open=false;$('#task-more summary')?.focus();return;}if(!$('#project-menu')?.hidden&&projectMenuKey(event))return;if(event.key==='Escape'){document.body.classList.remove('menu-open');if($('#sidebar-shade'))$('#sidebar-shade').hidden=true;}if(event.key==='/'&&!dialog.open&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){event.preventDefault();$('#search')?.focus();}});
 async function boot() {
   let existedMessage='';
   try {

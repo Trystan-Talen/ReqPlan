@@ -164,3 +164,12 @@ test('公元 1 年到 9999 年边界始终返回有效日期，时间线在边�
   const todayShifted = moveTimeline(state({ mode: 'custom', start: '0001-01-01', end: '9999-12-31' }), 'today', { today });
   assert.equal(todayShifted.start, today); assert.equal(todayShifted.end, '9999-12-31');
 });
+
+test('手机全局视图按实际剩余轨道宽度适配，不强行扩到 200 像素',()=>{
+  const extent=resolveTimelineExtent({project:{startDate:'2026-08-31',targetDate:'2026-12-31'},tasks:[],today});
+  for(const width of [1,120,143,190,1094]){
+    const zoom=resolveTimelineZoom(state({fit:true}),extent,width);
+    assert.equal(zoom.isFit,true);assert.ok(Math.abs(zoom.trackWidth-width)<0.001);
+    assert.ok(Math.abs(extent.days*zoom.px-width)<0.001);
+  }
+});

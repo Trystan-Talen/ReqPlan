@@ -12,6 +12,7 @@ import * as reviewUI from '../../frontend/review-ui.js';
 import * as batchUI from '../../frontend/task-batch.js';
 import * as workUI from '../../frontend/work-ui.js';
 import {renderDocumentPreview} from '../../frontend/document-preview.js';
+import * as portfolioUI from '../../frontend/portfolio.js';
 import * as uiKit from '../../frontend/ui-kit.js';
 import {webcrypto} from 'node:crypto';
 
@@ -39,7 +40,7 @@ async function fixture(t,{initialize=true,setupToken='',hash='#/team',recoveryLi
   class MockForm {constructor(kind,entries,id=''){this.dataset={kind,id,projectId:'p-exec'};this.entries=Object.entries(entries);this.id='entity-form';}querySelector(selector){return element(selector);}}
   class MockFormData {constructor(form){this.values=form.entries;}[Symbol.iterator](){return this.values[Symbol.iterator]();}getAll(key){return this.values.filter(entry=>entry[0]===key).map(entry=>entry[1]);}}
   const api=async(path,options={})=>{const result=await request('/api'+path,options);if(!result.ok)throw Object.assign(new Error(result.data.error),{status:result.status,code:result.data.code});return result.data;};
-  const context=vm.createContext({...uiKit,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
+  const context=vm.createContext({...uiKit,...portfolioUI,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
   const source=fs.readFileSync(new URL('../../frontend/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace(/\nboot\(\);\s*$/,'');
   vm.runInContext(source,context);
   if(admin){
@@ -475,4 +476,114 @@ test('自动同步：只读页面拉取他人修改后重绘，打开弹窗或�
   assert.equal(f.run('projectOf("p-exec").name'),'同事改过的项目名');
   f.element('#dialog').open=false;f.run('route={view:"requirements",projectId:"p-exec"};');
   assert.equal(f.run('canAutoRefresh()'),false);
+});
+
+test('主开发编辑转派并查看修改记录，只有管理员看到删除入口且可确认删除恢复',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const project=f.app.business.getProject(admin,'p-exec');
+  const lead=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  f.app.business.setMember(admin,'p-exec',{userId:lead,role:'lead',version:project.version});
+  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'任务编辑验证需求'});
+  await f.become(lead);
+  let task=f.app.business.createTask({id:lead},{projectId:'p-exec',requirementId:req.id,title:'待修正任务',description:'原始任务内容',ownerId:lead});
+  await f.run('reload()');f.context.taskId=task.id;f.run('route={view:"tasks",projectId:"p-exec"};');
+  const click=async dataset=>{const target={dataset,disabled:false,setAttribute(){}};await f.listeners.click({target:{closest:()=>target}});};
+  for(const layout of ['board','list']){
+    f.context.layout=layout;f.run('ui.taskLayout=layout;');const html=f.run('tasksView()');
+    assert.ok(html.includes(`data-task="${task.id}"`));assert.ok(!html.includes(`data-archive-id="${task.id}"`));
+    assert.doesNotMatch(html,/查看任务|编辑任务|删除任务/);
+  }
+  await click({task:task.id});
+  assert.match(f.element('#dialog').innerHTML,/编辑任务/);
+  assert.doesNotMatch(f.element('#dialog').innerHTML,/id="task-more"/);
+  await click({editTask:task.id});
+  assert.match(f.element('#dialog').innerHTML,/任务内容/);assert.match(f.element('#dialog').innerHTML,/原始任务内容/);
+  assert.match(f.element('#dialog').innerHTML,new RegExp(`<option value="${lead}" selected>`));
+  const other=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  assert.ok(f.element('#dialog').innerHTML.includes(`<option value="${other}">`));
+  f.context.form=new f.MockForm('tasks',{title:'修改后的任务',description:'具体工作与验收要求',requirementId:req.id,ownerId:other,status:'wait',estimateHours:'6'},task.id);
+  await f.run('saveEntity(form)');task=f.app.business.getTask({id:lead},task.id);
+  assert.equal(task.title,'修改后的任务');assert.equal(task.description,'具体工作与验收要求');assert.equal(task.ownerId,other);
+  assert.match(f.element('#dialog').innerHTML,/任务详情|修改记录/);
+  assert.match(f.element('#task-history').innerHTML,/具体工作与验收要求/);
+  assert.match(f.element('#task-history').innerHTML,/负责人/);
+  assert.equal((await f.request('/api/tasks/'+task.id,{method:'PATCH',body:{version:task.version,archived:true}})).status,403);
+  await f.become(admin.id);
+  assert.doesNotMatch(f.run('taskCard(data.tasks.find(task=>task.id===taskId))'),/查看任务|编辑任务|删除任务/);
+  await click({task:task.id});
+  assert.match(f.element('#dialog').innerHTML,/<details class="task-more" id="task-more"><summary aria-label="更多任务操作">更多<\/summary>/);
+  assert.match(f.element('#dialog').innerHTML,/删除任务/);
+  await click({editTask:task.id});
+  assert.doesNotMatch(f.element('#dialog').innerHTML,/删除任务/);
+  await click({archiveKind:'tasks',archiveId:task.id});
+  assert.match(f.element('#dialog').innerHTML,/删除后移出当前看板与排期/);assert.equal(f.element('#dialog').className,'is-center');
+  assert.equal(f.app.business.getTask({id:lead},task.id).archived,false);
+  await click({action:'close-dialog'});assert.equal(f.app.business.getTask({id:lead},task.id).archived,false);
+  await click({archiveKind:'tasks',archiveId:task.id});
+  await click({action:'confirm-archive',kind:'tasks',id:task.id,version:String(task.version),archived:'true'});
+  assert.equal(f.app.business.getTask({id:lead},task.id).archived,true);
+  assert.ok(!f.run('filtered("tasks").some(task=>task.id===taskId)'));
+  f.run('ui.archived=true');await f.run('showTask(taskId)');
+  assert.match(f.element('#dialog').innerHTML,/恢复任务/);assert.doesNotMatch(f.element('#dialog').innerHTML,/type="submit"/);
+  task=f.app.business.getTask({id:lead},task.id);
+  await click({archiveKind:'tasks',archiveId:task.id});
+  await click({action:'confirm-archive',kind:'tasks',id:task.id,version:String(task.version),archived:'false'});
+  task=f.app.business.getTask({id:lead},task.id);assert.equal(task.archived,false);assert.equal(task.description,'具体工作与验收要求');
+  await f.become(other);
+  assert.equal(f.run('taskRemovalButton(data.tasks.find(task=>task.id===taskId))'),'');
+  f.context.form=new f.MockForm('tasks',{title:'开发补充',description:'本人补充内容',ownerId:lead,status:'wait',estimateHours:'6'},task.id);
+  await f.run('saveEntity(form)');task=f.app.business.getTask({id:other},task.id);
+  assert.equal(task.ownerId,other);assert.equal(task.description,'本人补充内容');
+});
+
+test('全局甘特图首次渲染测量实际轨道宽度；溢出时允许拖动，全览无溢出时不拖动',async t=>{
+  const f=await fixture(t);
+  f.run('route={view:"portfolio",projectId:""};');
+  const view=f.element('#view'),scroll=f.element('.schedule-scroll'),chart=f.element('.schedule-chart');
+  view.clientWidth=1400;
+  assert.equal(f.run('timelineWidth()'),1118); // 280px name column, not the project schedule's 240px.
+  let html='',renders=0;
+  Object.defineProperty(view,'innerHTML',{get:()=>html,set:value=>{
+    html=value;renders++;
+    for(const key of ['extent-start','extent-days','px','fit-px','max-px','fit','today']){
+      const match=value.match(new RegExp('data-'+key+'="([^\"]*)"'));
+      if(match)chart.dataset[key.replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=match[1];
+    }
+    scroll.clientWidth=1000;f.element('.schedule-name').offsetWidth=280;
+    f.element('.schedule-chart .schedule-name').offsetWidth=280;
+  }});
+  f.run('renderView()');
+  assert.equal(renders,2);assert.ok(Math.abs(Number(chart.dataset.px)*Number(chart.dataset.extentDays)-720)<0.01);
+  scroll.scrollWidth=1200;scroll.scrollLeft=100;scroll.setPointerCapture=()=>{};
+  scroll.classList.contains=key=>key==='is-fit';
+  f.listeners.pointerdown({target:{closest:selector=>selector==='.schedule-scroll'?scroll:null},button:0,pointerType:'mouse',clientX:200,pointerId:1});
+  f.listeners.pointermove({pointerId:1,clientX:150});assert.equal(scroll.scrollLeft,150);
+  f.listeners.pointerup({pointerId:1});
+  scroll.scrollWidth=1000;
+  f.listeners.pointerdown({target:{closest:selector=>selector==='.schedule-scroll'?scroll:null},button:0,pointerType:'mouse',clientX:200,pointerId:2});
+  assert.equal(f.run('timelineDrag'),null);
+});
+
+test('任务历史接口按项目鉴权，保留修改人姓名与前后内容，详情转义用户内容',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'历史验证'});
+  let task=f.app.business.createTask(admin,{projectId:'p-exec',requirementId:req.id,title:'修改前标题',description:'修改前内容'});
+  task=f.app.business.updateTask(admin,task.id,{version:task.version,title:'修改后标题',description:'<script>不应执行</script>',reason:'修正任务范围'});
+  // Audit snapshots retain the name even after the account is renamed.
+  f.db.prepare('UPDATE users SET name=? WHERE id=?').run('后来改名',admin.id);
+  const history=await f.request('/api/tasks/'+task.id+'/history');
+  assert.equal(history.status,200);assert.equal(history.data.entries.length,2);
+  assert.equal(history.data.entries[0].actorName,admin.name);
+  assert.equal(history.data.entries[0].detail.before.description,'修改前内容');
+  assert.equal(history.data.entries[0].detail.reason,'修正任务范围');
+  await f.run('reload()');f.context.taskId=task.id;await f.run('showTask(taskId)');
+  assert.match(f.element('#dialog').innerHTML,/任务详情|修改记录/);
+  assert.match(f.element('#task-history').innerHTML,/任务内容|修改前内容|修正任务范围/);
+  assert.doesNotMatch(f.element('#task-history').innerHTML,/<script>/);
+  assert.equal((await f.request('/api/tasks/missing-task/history')).status,404);
+  const member=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  await f.become(member);assert.equal((await f.request('/api/tasks/'+task.id+'/history')).status,200);
+  assert.equal(f.run('taskRemovalButton(data.tasks.find(t=>t.id===taskId))'),'');
+  f.db.prepare('DELETE FROM memberships WHERE project_id=? AND user_id=?').run('p-exec',member);
+  assert.equal((await f.request('/api/tasks/'+task.id+'/history')).status,403);
 });

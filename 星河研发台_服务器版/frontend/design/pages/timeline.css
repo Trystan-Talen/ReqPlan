@@ -63,7 +63,7 @@
 .schedule-legend-today { width: 2px !important; height: 12px !important; border-radius: 1px !important; background: var(--c-orange); }
 
 .schedule-scroll { overflow-x: auto; overscroll-behavior-x: contain; cursor: grab; scrollbar-width: thin; }
-.schedule-scroll.is-fit { cursor: default; overflow-x: hidden; }
+.schedule-scroll.is-fit { cursor: default; }
 .schedule-scroll.is-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
 .schedule-scroll.is-dragging .schedule-bar { pointer-events: none; }
 .schedule-chart { --name-w: 240px; position: relative; width: calc(var(--name-w) + var(--track)); padding-bottom: var(--space-2); }
@@ -121,7 +121,7 @@
 .schedule-bar-done { --bar: var(--bar-done); }
 .schedule-bar-terminated { --bar: var(--bar-terminated); }
 .schedule-bar.is-overdue { --bar: var(--bar-overdue); background: repeating-linear-gradient(135deg, var(--bar-overdue) 0 8px, var(--bar-overdue-stripe) 8px 16px); }
-.schedule-bar-label { position: absolute; top: 50%; transform: translateY(-50%); z-index: 1; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); font-weight: 600; color: var(--text-2); pointer-events: none; }
+.schedule-bar-label { position: absolute; top: 50%; right: 0; transform: translateY(-50%); z-index: 1; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); font-weight: 600; color: var(--text-2); pointer-events: none; }
 .schedule-row:hover .schedule-bar-label { color: var(--text); }
 .schedule-chart-empty { display: grid; justify-items: center; gap: 6px; padding: var(--space-8) var(--space-5); text-align: center; position: relative; z-index: var(--z-sticky); background: var(--surface); }
 .schedule-chart-empty strong { font-size: var(--text-md); }

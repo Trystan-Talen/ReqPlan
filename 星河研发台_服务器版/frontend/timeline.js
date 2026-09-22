@@ -129,7 +129,7 @@ export function resolveTimelineExtent({ project = {}, tasks = [], today }) {
 }
 
 export function resolveTimelineZoom(state, extent, viewportWidth, context = {}) {
-  const width = Math.max(200, Number(viewportWidth) || 900);
+  const width = Math.max(1, Number(viewportWidth) || 900);
   const fit = width / extent.days;
   const max = Math.max(fit, Math.min(TIMELINE_LIMITS.maxDayPx, TIMELINE_LIMITS.maxChartPx / extent.days));
   let wanted;

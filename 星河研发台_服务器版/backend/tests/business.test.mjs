@@ -67,7 +67,7 @@ test('任务只从需求长出：主开发拆分派发，开发只能在参与�
   assert.throws(()=>b.updateTask(actor.dev,own.id,{version:own.version,status:'terminated',reason:'不做了'}),status(403));
   const ended=b.updateTask(actor.lead,own.id,{version:own.version,status:'terminated',reason:'合并到接口任务'});assert.equal(ended.status,'terminated');
   assert.throws(()=>b.archiveTask(actor.product,ended.id,{version:ended.version}),status(403));
-  assert.equal(b.archiveTask(actor.lead,ended.id,{version:ended.version}).archived,true);
+  assert.equal(b.archiveTask(actor.admin,ended.id,{version:ended.version}).archived,true);
 });
 
 test('主开发只能调整主责开发、协作人和排期，需求内容由产品经理维护，产品不能指定主责开发', t=>{
@@ -138,7 +138,7 @@ test('需求评审、拆分、排期门禁，提测与验收按角色流转，�
   assert.equal(b.getTask(actor.dev,task.id).archived,true);
   r=b.archiveRequirement(actor.product,r.id,{version:r.version,archived:false});
   assert.equal(b.getTask(actor.dev,task.id).archived,true);
-  task=b.getTask(actor.dev,task.id);task=b.archiveTask(actor.lead,task.id,{version:task.version,archived:false});assert.equal(task.archived,false);
+  task=b.getTask(actor.dev,task.id);task=b.archiveTask(actor.admin,task.id,{version:task.version,archived:false});assert.equal(task.archived,false);
 });
 
 test('成员管理限于项目负责人和系统管理员，负责人必须是产品经理或主开发，项目归档阻止写入', t=>{
@@ -225,4 +225,28 @@ test('迁移拒绝非空库、秘密字段和悬空关联，预检不写数据�
   const snapshot=JSON.parse(readFileSync(DEFAULT_SEED,'utf8'));snapshot.users[0].password='不得导入';assert.throws(()=>importLegacy(null,snapshot,{dryRun:true}),/凭证/);
   delete snapshot.users[0].password;snapshot.tasks[0].requirementId='r-missing';assert.throws(()=>importLegacy(null,snapshot,{dryRun:true}),/缺失或跨项目/);
   const dry=importLegacy(null,DEFAULT_SEED,{dryRun:true});assert.equal(dry.dryRun,true);assert.equal(dry.tasks,79);
+});
+
+test('任务删除和恢复仅系统管理员可用：主开发仍可编辑和转派，删除检查依赖与版本', t=>{
+  const {b,actor,p,requirement}=fixture(t);
+  let task=b.createTask(actor.lead,{projectId:p.id,requirementId:requirement.id,title:'建错的任务',description:'原始内容',ownerId:'lead'});
+  task=b.updateTask(actor.lead,task.id,{version:task.version,title:'修正后的任务',description:'修正交付要求',ownerId:'dev2'});
+  assert.equal(task.ownerId,'dev2');assert.equal(task.description,'修正交付要求');
+  assert.throws(()=>b.updateTask(actor.dev,task.id,{version:task.version,description:'越权修改'}),status(403));
+  for(const role of ['lead','dev2','product','tester','viewer','boss','other'])assert.throws(()=>b.archiveTask(actor[role],task.id,{version:task.version}),status(403));
+  let dependent=b.createTask(actor.lead,{projectId:p.id,requirementId:requirement.id,title:'依赖任务',ownerId:'dev',dependencyIds:[task.id]});
+  assert.throws(()=>b.archiveTask(actor.admin,task.id,{version:task.version}),error=>error.code==='TASK_IN_USE');
+  assert.equal(b.getTask(actor.lead,task.id).version,task.version);
+  dependent=b.updateTask(actor.lead,dependent.id,{version:dependent.version,dependencyIds:[]});
+  assert.throws(()=>b.archiveTask(actor.admin,task.id,{version:task.version-1}),error=>error.code==='VERSION_CONFLICT');
+  const deleted=b.archiveTask(actor.admin,task.id,{version:task.version});
+  assert.equal(deleted.archived,true);assert.equal(deleted.description,task.description);
+  assert.ok(!b.listTasks(actor.lead,{projectId:p.id}).some(item=>item.id===task.id));
+  assert.throws(()=>b.updateTask(actor.lead,task.id,{version:deleted.version,title:'已删除不能编辑'}),error=>error.code==='ARCHIVED');
+  const restored=b.archiveTask(actor.admin,task.id,{version:deleted.version,archived:false});
+  assert.equal(restored.archived,false);assert.equal(restored.id,task.id);assert.equal(restored.ownerId,'dev2');
+  assert.equal(restored.requirementId,requirement.id);assert.equal(restored.description,'修正交付要求');
+  assert.equal(b.getTask(actor.lead,dependent.id).archived,false);
+  const actions=b.listHistory(actor.lead,{entityType:'task',entityId:task.id}).map(entry=>entry.action);
+  for(const action of ['create','update','archive','restore'])assert.ok(actions.includes(action));
 });

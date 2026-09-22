@@ -33,13 +33,15 @@
 .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--gap-card); }
 .project-card {
   --project: var(--accent);
-  position: relative; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  position: relative; isolation: isolate; display: flex; flex-direction: column; gap: 14px; min-width: 0;
   padding: 18px 18px var(--space-4); border-radius: var(--radius-lg);
   background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-sm);
   transition: transform .2s var(--ease), box-shadow .2s var(--ease), border-color .2s;
   animation: rise .4s var(--ease) both;
 }
-.project-card::before { content: ""; position: absolute; inset: -1px -1px auto; height: 3px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--project); opacity: .9; }
+/* Offset two equal-radius surfaces: the front card naturally tapers the exposed color at both corners. */
+.project-card::before { content: ""; position: absolute; z-index: -2; inset: -4px -1px auto; height: calc(var(--radius-lg) * 2); border-radius: var(--radius-lg); background: var(--project); opacity: .9; pointer-events: none; }
+.project-card::after { content: ""; position: absolute; z-index: -1; inset: -1px; border: inherit; border-radius: inherit; background: var(--surface); pointer-events: none; }
 .project-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--border-strong); }
 .project-card-top { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .project-card-top h3 { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -13,7 +13,8 @@ export const REVIEW_ROLES = Object.freeze(['product', 'lead', 'developer', 'test
 const PERMISSIONS = Object.freeze({
   editRequirement: ['product'],        // create, edit content, archive, upload documents
   planRequirement: ['product', 'lead'], // plan dates, batch reschedule
-  assignTasks: ['lead'],                // choose the lead developer, split, assign, terminate and archive tasks
+  assignTasks: ['lead'],                // choose the lead developer, split, assign and terminate tasks
+  deleteTask: [],                      // only the system administrator may delete/restore tasks
   createOwnTask: ['lead', 'developer'], // add a task owned by oneself under a requirement one takes part in
   reviewTask: REVIEW_ROLES,             // confirm or reopen finished tasks
   reviewRequirement: REVIEW_ROLES,      // accept or send back requirements under test
