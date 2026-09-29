@@ -14,3 +14,4 @@ data.seed.json
 **/.env
 *.log
 .DS_Store
+.git.broken-backup/

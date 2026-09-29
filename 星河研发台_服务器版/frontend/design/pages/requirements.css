@@ -1,0 +1,35 @@
+/* 需求提议与需求交付流程；状态颜色由 ui-kit 的状态标签提供。 */
+.proposal-list { min-width: 720px; }
+.proposal-list .proposal-title-cell { min-width: 240px; max-width: 520px; white-space: normal; }
+.proposal-title { display: flex; min-width: 0; }
+.proposal-title > button { min-width: 0; text-align: left; overflow-wrap: anywhere; }
+.proposal-title-cell .item-meta { overflow-wrap: anywhere; }
+.proposal-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin-top: var(--space-1); font-size: var(--text-sm); color: var(--text-3); line-height: 1.5; overflow-wrap: anywhere; }
+.proposal-link { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.proposal-link code { font-size: var(--text-xs); color: var(--text-3); overflow-wrap: anywhere; }
+
+.delivery-workflow { display: grid; gap: var(--space-4); min-width: 0; padding: var(--space-4); background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+.delivery-workflow-heading { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.delivery-workflow-heading h3 { font-size: var(--text-base); font-weight: 650; }
+.delivery-workflow-heading .field-help { margin: 0; }
+.delivery-stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-2); list-style: none; padding: 0; }
+.delivery-stage { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-2) var(--space-1); border-radius: var(--radius-sm); color: var(--text-3); font-size: var(--text-xs); text-align: center; }
+.delivery-stage-number { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--surface); font-family: var(--font-mono); font-size: var(--text-xs); }
+.delivery-stage.is-current { color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+.delivery-stage.is-current .delivery-stage-number { border-color: var(--accent); }
+.delivery-next { display: grid; gap: var(--space-1); min-width: 0; }
+.delivery-next strong { font-size: var(--text-base); }
+.delivery-next p { font-size: var(--text-sm); line-height: 1.65; color: var(--text-2); overflow-wrap: anywhere; }
+.delivery-task-summary { font-size: var(--text-xs); line-height: 1.7; color: var(--text-3); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.delivery-gates { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.delivery-gates h4 { font-size: var(--text-sm); color: var(--text-2); }
+.delivery-gates ul { display: grid; gap: var(--space-1); padding-left: var(--space-4); color: var(--text-2); font-size: var(--text-sm); line-height: 1.6; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .delivery-workflow { padding: var(--space-3); gap: var(--space-3); }
+  .delivery-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .proposal-list .proposal-title-cell { min-width: 220px; max-width: 280px; }
+}
+.requirement-planning-fields { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); }
+.requirement-planning-fields > summary { cursor: pointer; color: var(--text-2); font-weight: 600; }
+.requirement-planning-fields > .form-grid { margin-top: var(--space-3); }
