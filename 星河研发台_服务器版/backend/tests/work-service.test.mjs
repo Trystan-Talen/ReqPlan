@@ -18,18 +18,22 @@ function fixture(t) {
     db.prepare(`UPDATE ${table} SET data=?,archived=? WHERE id=?`).run(JSON.stringify({...data,...changes}),changes.archived?1:0,item.id);
     return {...item,...changes};
   };
-  // Tasks always grow from a requirement; the shared parent has no creation date so trends ignore it.
+  // Tasks grow from a scheduled requirement; no creation date means the fixture parent is not in trends.
   const parents = new Map();
-  const parent = projectId => { if (!parents.has(projectId)) parents.set(projectId, patch('requirements', b.createRequirement(actor.admin,{projectId,title:'任务所属需求',ownerId:'admin'}), {createdAt:''})); return parents.get(projectId).id; };
+  const parent = projectId => { if (!parents.has(projectId)) parents.set(projectId, patch('requirements', b.createRequirement(actor.admin,{projectId,title:'任务所属需求',description:'背景',acceptance:'验收',ownerId:'admin'}), {status:'已排期',createdAt:'',deliveryWorkflow:false})); return parents.get(projectId).id; };
   const task = (title,changes={}) => {
     const {status='wait',createdAt='2026-09-01',completedAt='',archived=false,projectId=project.id,...input}=changes;
-    const item=b.createTask(actor.admin,{projectId,requirementId:parent(projectId),title,ownerId:projectId===project.id?'dev':'admin',...input});
+    const requirementId=input.requirementId||parent(projectId),before=db.prepare('SELECT data,version,updated_at FROM requirements WHERE id=?').get(requirementId);
+    const item=b.createTask(actor.admin,{projectId,requirementId,title,ownerId:projectId===project.id?'dev':'admin',...input});
+    // These are historical work snapshots, not workflow transition fixtures.
+    // Restore the prescribed requirement snapshot after normal task creation adopts automation.
+    db.prepare('UPDATE requirements SET data=?,version=?,updated_at=? WHERE id=?').run(before.data,before.version,before.updated_at,requirementId);
     return patch('tasks',item,{status,createdAt,completedAt,archived});
   };
   const requirement = (title,changes={}) => {
-    const {status='未确定',createdAt='2026-09-01',archived=false,projectId=project.id,...input}=changes;
-    const item=b.createRequirement(actor.admin,{projectId,title,ownerId:'product',...input});
-    return patch('requirements',item,{status,createdAt,archived});
+    const {status='已确定',createdAt='2026-09-01',archived=false,projectId=project.id,...input}=changes;
+    const item=b.createRequirement(actor.admin,{projectId,title,description:'背景',acceptance:'验收',ownerId:'product',...input});
+    return patch('requirements',item,{status,createdAt,archived,deliveryWorkflow:false});
   };
   const ids = items => items.map(item=>item.id).sort();
   return {db,b,work,actor,project,other,patch,task,requirement,ids};
@@ -110,7 +114,7 @@ test('已读状态只写当前用户，拒绝不可见编号且失败没有残�
   const result=work.markRead(actor.dev,{ids:[notice.id,notice.id],date:TODAY});
   assert.equal(result.readCount,1);
   assert.equal(work.snapshot(actor.dev,TODAY).unread,0);
-  assert.equal(work.snapshot(actor.lead,TODAY).unread,1);
+  assert.equal(work.snapshot(actor.lead,TODAY).reminders.find(item=>item.id===notice.id).read,false);
   assert.equal(work.snapshot(actor.lead,TODAY).reminders[0].read,false);
   for(const ids of [[notice.id],['0'.repeat(32)]])assert.throws(()=>work.markRead(actor.outsider,{ids,date:TODAY}),error=>error.status===404);
   assert.equal(db.prepare('SELECT count(*) n FROM app_meta').get().n,1);
@@ -178,4 +182,92 @@ test('主开发收到待拆分需求和开发自行补充任务的提醒，其�
   const added=work.snapshot(actor.lead,TODAY).reminders.filter(item=>item.kind==='added');
   assert.deepEqual(added.map(item=>item.entityId),[byDev.id]);assert(!added.some(item=>item.entityId===byLead.id));
   assert(!work.snapshot(actor.product,TODAY).reminders.some(item=>item.kind==='added'));
+});
+
+test('主开发待安排清单根据真实任务缺项更新，承诺日期不代替研发排期',t=>{
+  const {db,work,actor,requirement,task,patch}=fixture(t);
+  const item=requirement('需要研发排期',{status:'已确定',assigneeId:'dev',planStart:'2026-09-01',planEnd:'2026-10-01'});
+  const byId=()=>work.snapshot(actor.lead,TODAY).personal.splits.find(row=>row.id===item.id);
+  assert.equal(byId().planningKind,'split');assert.match(byId().planningGates.join('；'),/有效交付任务/);
+  const assigned=task('已拆分但尚无任务日期',{requirementId:item.id,estimateHours:8});
+  assert.equal(byId().planningKind,'schedule');assert.match(byId().planningGates.join('；'),/1 项有效任务/);
+  const notice=work.snapshot(actor.lead,TODAY).reminders.find(row=>row.entityId===item.id&&row.kind==='schedule');
+  assert.equal(notice.openTasks,true);work.markRead(actor.lead,{ids:[notice.id],date:TODAY});
+  assert.equal(work.snapshot(actor.lead,TODAY).reminders.find(row=>row.id===notice.id).read,true);
+  patch('tasks',assigned,{startDate:'2026-09-17',dueDate:'2026-09-22'});
+  assert.equal(byId(),undefined,'任务日期完善即离开待安排，不需要再提交研发计划');
+  const mine=work.snapshot(actor.dev,TODAY).personal.requirements.find(row=>row.id===item.id);
+  assert.equal(mine.developmentStart,'2026-09-17');assert.equal(mine.developmentEnd,'2026-09-22');assert.equal(mine.planEnd,'2026-10-01');
+  const source=JSON.parse(db.prepare('SELECT data FROM requirements WHERE id=?').get(item.id).data);
+  assert.equal(source.planStart,'2026-09-01');assert.equal(source.planEnd,'2026-10-01');assert.equal(source.developmentEnd,undefined,'工作台读取不写入真实需求');
+  patch('tasks',assigned,{dueDate:''});assert.equal(byId().planningKind,'schedule');
+  patch('tasks',assigned,{status:'terminated'});assert.equal(byId().planningKind,'split');
+  patch('requirements',item,{status:'已终止'});assert.equal(byId(),undefined);
+});
+
+test('未确定和待评审属于提议，不进入研发需求待办与需求统计', t => {
+  const {work,actor,requirement}=fixture(t);
+  const confirmed=requirement('确认的研发需求',{assigneeId:'dev',createdAt:TODAY});
+  for(const status of ['未确定','待评审'])requirement(`尚待评估的${status}`,{status,assigneeId:'dev',ownerId:'dev',createdAt:TODAY});
+  const snapshot=work.snapshot(actor.dev,TODAY);
+  assert.deepEqual(snapshot.personal.requirements.map(item=>item.id),[confirmed.id]);
+  assert.equal(snapshot.trend.reduce((sum,week)=>sum+week.createdRequirements,0),1);
+  assert.equal(work.snapshot(actor.admin,TODAY).trend.reduce((sum,week)=>sum+week.createdRequirements,0),1);
+  assert(!snapshot.reminders.some(item=>item.title.startsWith('尚待评估')));
+});
+
+test('需求仅在测试中且有效任务全部完成时提醒有权验收的人', t => {
+  const {work,actor,requirement,task,patch}=fixture(t);
+  const ready=requirement('等待最终需求验收',{status:'测试中',planEnd:'2026-09-19'});
+  task('已验收任务',{requirementId:ready.id,status:'done',completedAt:'2026-09-16T01:00:00Z'});
+  task('已退出范围',{requirementId:ready.id,status:'terminated'});
+  task('已归档任务',{requirementId:ready.id,status:'wait',archived:true});
+  const unfinished=requirement('仍有任务待验收',{status:'测试中'});
+  task('只完成一部分',{requirementId:unfinished.id,status:'done'});
+  task('仍在测试',{requirementId:unfinished.id,status:'test'});
+  const terminated=requirement('全部任务终止',{status:'测试中'});
+  task('终止工作',{requirementId:terminated.id,status:'terminated'});
+  const archived=requirement('全部任务归档',{status:'测试中'});
+  task('归档工作',{requirementId:archived.id,status:'done',archived:true});
+  const developing=requirement('尚未进入测试',{status:'开发中'});
+  task('任务完成但需求还在开发',{requirementId:developing.id,status:'done'});
+  const withoutAcceptance=requirement('缺少验收标准',{status:'测试中'});
+  task('完成了但没有验收标准',{requirementId:withoutAcceptance.id,status:'done'});
+  patch('requirements',withoutAcceptance,{acceptance:''});
+  const hold=requirement('人工重开等待返工',{status:'测试中'});
+  task('上一轮完成的任务',{requirementId:hold.id,status:'done'});
+  patch('requirements',hold,{workflowHold:true});
+  const notices=role=>work.snapshot(actor[role],TODAY).reminders.filter(item=>item.kind==='review'&&item.entityType==='requirement');
+  for(const role of ['admin','product','lead','tester']) {
+    assert.deepEqual(notices(role).map(item=>item.entityId),[ready.id],role);
+    assert.match(notices(role)[0].message,/等待确认需求验收/);
+  }
+  for(const role of ['dev','viewer','outsider'])assert.deepEqual(notices(role),[],role);
+});
+
+test('需求验收提醒身份稳定，已读不会随刷新或普通编辑重置，返工完成后重新提醒', t => {
+  const {db,work,actor,requirement,task,patch}=fixture(t);
+  const ready=requirement('验收提醒',{status:'测试中'});
+  const done=task('已完成任务',{requirementId:ready.id,status:'done',completedAt:'2026-09-16T01:00:00Z'});
+  const notice=()=>work.snapshot(actor.product,TODAY).reminders.find(item=>item.kind==='review'&&item.entityType==='requirement'&&item.entityId===ready.id);
+  const original=notice();
+  work.markRead(actor.product,{ids:[original.id],date:TODAY});
+  assert.equal(notice().read,true);
+  assert.equal(work.snapshot(actor.tester,TODAY).reminders.find(item=>item.id===original.id).read,false);
+  patch('requirements',ready,{title:'修改文案后的验收提醒'});
+  patch('tasks',done,{title:'修改任务标题',estimateHours:16});
+  db.prepare('UPDATE requirements SET version=version+1 WHERE id=?').run(ready.id);
+  db.prepare('UPDATE tasks SET version=version+1 WHERE id=?').run(done.id);
+  assert.equal(notice().id,original.id);
+  assert.equal(notice().read,true);
+  assert.equal(work.snapshot(actor.product,'2026-09-17').reminders.find(item=>item.entityId===ready.id).id,original.id);
+  patch('tasks',done,{status:'develop',completedAt:''});
+  assert.equal(notice(),undefined);
+  patch('tasks',done,{status:'test'});
+  assert.equal(notice(),undefined);
+  patch('tasks',done,{status:'done',completedAt:'2026-09-16T05:00:00Z'});
+  assert.notEqual(notice().id,original.id);
+  assert.equal(notice().read,false);
+  patch('requirements',ready,{status:'已完成'});
+  assert.equal(notice(),undefined);
 });

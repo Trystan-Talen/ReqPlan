@@ -54,7 +54,8 @@ test('接口认证、来源校验、防跨站请求与响应脱敏',async t=>{
 test('真实服务完成项目、需求、任务、乐观锁和附件闭环',async t=>{
   const f=await fixture(t);
   const p=await f.write('/api/projects',{name:'服务器验收项目',status:'进行中',description:'持久化写入'});assert.equal(p.res.status,201,JSON.stringify(p.data));
-  const r=await f.write('/api/requirements',{projectId:p.data.id,title:'验收需求',description:'原始正文',priority:'P1',status:'未确定',acceptance:'可保存并读取'});assert.equal(r.res.status,201,JSON.stringify(r.data));
+  const unconfirmed=await f.write('/api/requirements',{projectId:p.data.id,title:'未确认内容',description:'待评估',priority:'P1',status:'未确定',acceptance:'待评估'});assert.equal(unconfirmed.res.status,400);assert.equal(unconfirmed.data.code,'TRANSITION_GATE');
+  const r=await f.write('/api/requirements',{projectId:p.data.id,title:'验收需求',description:'原始正文',priority:'P1',acceptance:'可保存并读取'});assert.equal(r.res.status,201,JSON.stringify(r.data));assert.equal(r.data.status,'已确定');assert.equal(r.data.originType,'direct');
   const task=await f.write('/api/tasks',{projectId:p.data.id,requirementId:r.data.id,title:'验收任务',status:'wait',estimateHours:8});assert.equal(task.res.status,201,JSON.stringify(task.data));
   const competing=await Promise.all([
     f.write('/api/requirements/'+r.data.id,{version:r.data.version,title:'修改一'},'PATCH'),

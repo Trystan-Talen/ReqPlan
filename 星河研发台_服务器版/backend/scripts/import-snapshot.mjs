@@ -22,7 +22,7 @@ export async function importSnapshot(snapshot,target,{temporaryRoot}={}) {
   const db=openDatabase(target);
   try{
     const count=table=>db.prepare(`SELECT COUNT(*) AS total FROM ${table}`).get().total;
-    const counts={users:count('users'),projects:count('projects'),requirements:count('requirements'),tasks:count('tasks'),attachments:count('attachments'),documentVersions:count('document_versions')};
+    const counts={users:count('users'),projects:count('projects'),requirements:count('requirements'),tasks:count('tasks'),attachments:count('attachments'),documentVersions:count('document_versions'),proposals:count('proposals')};
     for(const [key,value] of Object.entries(counts)){
       const expected=rehearsal.counts[{documentVersions:'document_versions'}[key]||key];
       if(expected!==undefined&&value!==expected)throw new Error('导入后数据数量与快照不一致，请保留快照并联系维护人员。');

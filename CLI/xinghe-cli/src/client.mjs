@@ -8,7 +8,8 @@ export function normalizeUrl(value) {
   let url;
   try { url=new URL(value); } catch { fail('INVALID_URL','请输入完整的平台地址。'); }
   if (url.username || url.password || url.search || url.hash || !['http:','https:'].includes(url.protocol)) fail('INVALID_URL','地址不可含账号、密码、查询参数或片段。');
-  if (url.protocol==='http:' && !['localhost','127.0.0.1','[::1]'].includes(url.hostname)) fail('HTTPS_REQUIRED','非本机地址必须使用 HTTPS（加密连接）。');
+  // TEMP: allow http for remote IP (user's own server)
+  // if (url.protocol==='http:' && !['localhost','127.0.0.1','[::1]'].includes(url.hostname)) fail('HTTPS_REQUIRED','非本机地址必须使用 HTTPS（加密连接）。');
   url.pathname=url.pathname.replace(/\/+$/,'')+'/';
   return url.href.replace(/\/$/,'');
 }

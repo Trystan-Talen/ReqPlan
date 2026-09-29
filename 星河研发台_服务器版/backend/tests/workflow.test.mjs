@@ -1,24 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkRequirementTransition, availableRequirementActions, availableTaskStatuses, checkTaskTransition, taskGranularity, normalizeBaseline, getScheduleComparison, roleCan } from '../../frontend/workflow.js';
+import { checkRequirementTransition, availableRequirementActions, availableTaskStatuses, checkTaskTransition, taskGranularity, normalizeBaseline, getScheduleComparison, roleCan, requirementDeliveryState } from '../../frontend/workflow.js';
 
 test('共享需求流程保持门禁、角色验收及中文旧任务兼容', () => {
   const previous = { status: '测试中', acceptance: '验收口径' }, next = { ...previous, status: '已完成' };
   assert.equal(checkRequirementTransition('viewer', previous, next, { tasks: [{status:'已完成'}] }).code, 'FORBIDDEN');
-  for (const role of ['product', 'lead', 'developer']) assert.equal(checkRequirementTransition(role, previous, next, { tasks: [{status:'已完成'}] }).ok, true);
+  for (const role of ['product', 'lead', 'tester']) assert.equal(checkRequirementTransition(role, previous, next, { tasks: [{status:'已完成'}] }).ok, true);
+  assert.equal(checkRequirementTransition('developer', previous, next, { tasks: [{status:'已完成'}] }).code, 'FORBIDDEN');
   assert.equal(checkRequirementTransition('tester', previous, next, { tasks: [{status:'已完成'}, {status:'已终止'}] }).ok, true);
   assert.equal(checkRequirementTransition('admin', previous, next, { tasks: [{status:'done',archived:true}] }).code, 'TRANSITION_GATE');
   assert.equal(checkRequirementTransition('admin', {status:'未确定'}, {status:'已完成'}).code, 'STATE_TRANSITION');
-  assert.equal(availableRequirementActions('developer', previous).find(action => action.status === '已完成').allowed, false);
+  assert.equal(availableRequirementActions('developer', previous).some(action => action.status === '已完成'), false);
   assert.equal(availableRequirementActions('tester', previous).find(action => action.status === '已完成').allowed, false);
   assert.deepEqual(availableRequirementActions('viewer', previous), []);
-  const ready = { status:'已确定', acceptance:'有标准', assigneeId:'dev', planStart:'2026-09-01', planEnd:'2026-09-10' };
-  assert.equal(availableRequirementActions('product', ready).find(action => action.status === '已排期').allowed, false);
-  assert.equal(availableRequirementActions('product', ready, {tasks:[{status:'wait',ownerId:'dev'}]}).find(action => action.status === '已排期').allowed, false);
-  assert.equal(availableRequirementActions('product', ready, {tasks:[{status:'wait',ownerId:'dev',estimateHours:8},{status:'terminated'}]}).find(action => action.status === '已排期').allowed, true);
+  const ready = { status:'已确定', deliveryWorkflow:true, acceptance:'有标准', assigneeId:'dev', planStart:'2026-09-01', planEnd:'2026-09-10' };
+  assert.equal(requirementDeliveryState(ready).status, '已确定');
+  assert.equal(requirementDeliveryState(ready,[{status:'wait',ownerId:'dev',estimateHours:8}]).status,'待排期');
+  assert.equal(requirementDeliveryState(ready,[{status:'wait',ownerId:'dev',estimateHours:8,startDate:'2026-09-02',dueDate:'2026-09-11'},{status:'terminated'}]).status,'已排期');
   assert.equal(availableRequirementActions('product', ready).some(action => action.status === '待排期'), false);
-  assert.equal(availableRequirementActions('lead', ready, {tasks:[{status:'wait',ownerId:'dev',estimateHours:8}]}).find(action => action.status === '待排期').allowed, true);
-  assert.equal(availableRequirementActions('lead', ready, {tasks:[{status:'wait',ownerId:'dev',estimateHours:8}]}).find(action => action.status === '已排期').allowed, true);
+  assert.equal(availableRequirementActions('lead', ready).some(action => ['待排期','已排期'].includes(action.status)), false);
 });
 
 test('角色流转矩阵：产品管评审和终止，主开发拆分排期，开发提测，测试验收或带原因退回，管理层与观察者只读', () => {
@@ -28,9 +28,9 @@ test('角色流转矩阵：产品管评审和终止，主开发拆分排期，�
   assert.equal(checkRequirementTransition('lead', draft, {...draft,status:'已终止'}, {reason:'取消'}).code, 'FORBIDDEN');
   assert.equal(checkRequirementTransition('product', draft, {...draft,status:'已终止'}).status, 400);
   const developing = { status:'开发中', acceptance:'标准', assigneeId:'dev', planStart:'2026-09-01', planEnd:'2026-09-10' };
-  assert.equal(checkRequirementTransition('developer', developing, {...developing,status:'测试中'}, {tasks:[{status:'develop'}]}).code, 'TRANSITION_GATE');
-  assert.equal(checkRequirementTransition('developer', developing, {...developing,status:'测试中'}, {tasks:[{status:'test'},{status:'terminated'}]}).ok, true);
-  assert.equal(checkRequirementTransition('product', developing, {...developing,status:'测试中'}, {tasks:[{status:'test'}]}).code, 'FORBIDDEN');
+  assert.equal(checkRequirementTransition('developer', developing, {...developing,status:'测试中'}, {tasks:[{status:'develop'}]}).code, 'AUTOMATIC_WORKFLOW');
+  assert.equal(requirementDeliveryState({...developing,deliveryWorkflow:true},[{status:'test'},{status:'terminated'}]).status,'测试中');
+  assert.equal(checkRequirementTransition('product', developing, {...developing,status:'测试中'}, {tasks:[{status:'test'}]}).code, 'AUTOMATIC_WORKFLOW');
   const testing = {...developing, status:'测试中'};
   assert.equal(checkRequirementTransition('tester', testing, {...testing,status:'开发中'}).status, 400);
   assert.equal(checkRequirementTransition('tester', testing, {...testing,status:'开发中'}, {reason:'登录失败',tasks:[{status:'test'}]}).ok, true);
@@ -38,6 +38,7 @@ test('角色流转矩阵：产品管评审和终止，主开发拆分排期，�
   assert.deepEqual(availableRequirementActions('executive', testing), []);
   assert.equal(roleCan('lead','assignTasks'), true); assert.equal(roleCan('product','assignTasks'), false);
   assert.equal(roleCan('developer','createOwnTask'), true); assert.equal(roleCan('tester','createOwnTask'), false);
+  assert.equal(roleCan('developer','reviewRequirement'), false); assert.equal(roleCan('tester','reviewRequirement'), true);
   assert.equal(roleCan('admin','editRequirement'), true); assert.equal(roleCan('executive','planRequirement'), false);
 });
 

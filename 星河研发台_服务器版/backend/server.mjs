@@ -5,6 +5,7 @@ import {randomUUID,createHash,timingSafeEqual} from 'node:crypto';
 import {openDatabase} from './database.mjs';
 import {createAuth} from './auth.mjs';
 import {createBusiness} from './business.mjs';
+import {createProposalService} from './proposals.mjs';
 import {createWorkService} from './work-service.mjs';
 import {startBackupService} from './scripts/backup-service.mjs';
 
@@ -31,6 +32,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
   { const parsed=new URL(origin); const alias={'127.0.0.1':'localhost','localhost':'127.0.0.1'}[parsed.hostname]; if(alias){parsed.hostname=alias;trustedOrigins.add(parsed.origin);} }
   const auth=createAuth(db,{secureCookies});
   const business=createBusiness(db);
+  const proposals=createProposalService(db,business);
   const work=createWorkService(db,business);
   if(setupToken && !/^[A-Za-z0-9_-]{43}$/.test(setupToken)) throw new Error('初始化凭证必须是 32 字节随机值的安全编码。');
   let setupHash=setupToken?createHash('sha256').update(setupToken).digest():null;
@@ -95,7 +97,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
         return json(res,200,{ok:true,requiresLogin:true},{'Set-Cookie':auth.clearCookie()});
       }
       if(actor.mustChangePassword) throw fail(403,'PASSWORD_CHANGE_REQUIRED','请先修改初始密码。');
-      if(method==='GET' && endpoint==='/api/bootstrap') return json(res,200,business.bootstrap(actor,{includeArchived:url.searchParams.get('includeArchived')==='1'}));
+      if(method==='GET' && endpoint==='/api/bootstrap') { const options={includeArchived:url.searchParams.get('includeArchived')==='1'};return json(res,200,{...business.bootstrap(actor,options),proposals:proposals.list(actor,options)}); }
       if(method==='GET' && endpoint==='/api/work') return json(res,200,work.snapshot(actor,url.searchParams.get('date')||undefined));
       if(method==='POST' && endpoint==='/api/work/read') return json(res,200,work.markRead(actor,await readJson(req)));
       if(endpoint==='/api/admin/backup-status' || endpoint==='/api/admin/backup-run') {
@@ -115,6 +117,17 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
         return json(res,201,{user:result.user,activationToken:result.activation.token,expiresAt:result.activation.expiresAt});
       }
       let match;
+      if(endpoint==='/api/proposals') {
+        if(method==='GET') return json(res,200,{proposals:proposals.list(actor,{projectId:url.searchParams.get('projectId')||undefined,includeArchived:url.searchParams.get('includeArchived')==='1'})});
+        if(method==='POST') return json(res,201,proposals.create(actor,await readJson(req)));
+      }
+      if((match=endpoint.match(/^\/api\/proposals\/([^/]+)\/history$/)) && method==='GET') return json(res,200,{entries:proposals.history(actor,param(match[1]))});
+      if((match=endpoint.match(/^\/api\/proposals\/([^/]+)\/approve$/)) && method==='POST') return json(res,200,proposals.approve(actor,param(match[1]),await readJson(req)));
+      if((match=endpoint.match(/^\/api\/proposals\/([^/]+)$/))) {
+        const id=param(match[1]);
+        if(method==='GET') return json(res,200,proposals.read(actor,id));
+        if(method==='PATCH') return json(res,200,proposals.update(actor,id,await readJson(req)));
+      }
       if((match=endpoint.match(/^\/api\/users\/([^/]+)\/reset-password$/)) && method==='POST') {
         const result=auth.resetPassword(actor,param(match[1]));
         return json(res,200,{user:result.user,activationToken:result.token,expiresAt:result.expiresAt});
@@ -132,6 +145,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
         if(method==='DELETE'&&match[2]) return json(res,200,business.removeMember(actor,id,param(match[2]),await readJson(req)));
       }
       if((match=endpoint.match(/^\/api\/requirements\/([^/]+)\/task-batch$/)) && method==='POST') return json(res,201,business.createTaskBatch(actor,param(match[1]),await readJson(req)));
+      if((match=endpoint.match(/^\/api\/requirements\/([^/]+)\/(submit-plan|return|reopen)$/)) && method==='POST') return json(res,200,business[{'submit-plan':'submitRequirementPlan',return:'returnRequirement',reopen:'reopenRequirement'}[match[2]]](actor,param(match[1]),await readJson(req)));
       if((match=endpoint.match(/^\/api\/projects\/([^/]+)\/schedule\/(preview|apply)$/)) && method==='POST') return json(res,200,business[match[2]==='preview'?'previewSchedule':'applySchedule'](actor,param(match[1]),await readJson(req)));
       if((match=endpoint.match(/^\/api\/attachments\/([^/]+)\/versions$/)) && method==='GET') return json(res,200,{versions:business.listAttachmentVersions(actor,param(match[1]))});
       if((match=endpoint.match(/^\/api\/tasks\/([^/]+)\/history$/)) && method==='GET') { const id=param(match[1]);business.getTask(actor,id);return json(res,200,{entries:business.listHistory(actor,{entityType:'task',entityId:id,limit:200})}); }
@@ -186,7 +200,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
   };
   const server=http.createServer(handler);
   server.requestTimeout=30_000;server.headersTimeout=15_000;server.keepAliveTimeout=5_000;
-  return {server,handler,auth,business};
+  return {server,handler,auth,business,proposals};
 }
 
 if(process.argv[1] && path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {

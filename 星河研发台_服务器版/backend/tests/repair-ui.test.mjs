@@ -23,10 +23,10 @@ test('修改历史展示人员、状态与空值的实际差异，并转义正�
 
 test('旧排期基线兼容跨月偏移，缺失与无效日期不伪造天数',()=>{
   const legacy=renderBaseline({baseline:{startDate:'2024-02-28',dueDate:'2024-03-05'},planStart:'2024-03-01',planEnd:'2024-03-03',rescheduleCount:2});
-  assert.match(legacy,/推迟 2 天/);assert.match(legacy,/提前 2 天/);assert.match(legacy,/已改期 2 次/);assert.match(legacy,/2024-02-28/);
+  assert.match(legacy,/推迟 2 天/);assert.match(legacy,/提前 2 天/);assert.match(legacy,/已调整 2 次/);assert.match(legacy,/2024-02-28/);assert.match(legacy,/交付承诺基线对比/);
   const partial=renderBaseline({baseline:{planStart:'2024-02-30',planEnd:'2024-03-05',capturedAt:'<img onerror=x>'},planStart:'2024-03-01',planEnd:'2024-03-05'});
   assert.match(partial,/无法计算/);assert.match(partial,/未偏移/);assert.doesNotMatch(partial,/NaN|<img/);
-  assert.match(renderBaseline({baseline:null}),/尚未发生/);
+  assert.match(renderBaseline({baseline:null}),/尚未调整交付承诺/);
 });
 
 test('逐行错误、流程条件和文本版本对照均展示细节且不执行附件内容',()=>{

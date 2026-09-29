@@ -2,6 +2,9 @@
 // When you add a component or token, add a sample here in the same change.
 import { esc, icon, BRAND_MARK, STATUS_TONES, TONES, badge, toneBadge, priority, accountStatus, countLabel, avatarMark, personChip, button, segmented, switchToggle, heading, sectionHeading, metric, metricStrip, panel, empty, loading, notice, detailList, progress, field, input, select, area, options, REQUIRED } from './ui-kit.js';
 
+import { renderRequirementTaskGroups } from './task-groups.js';
+import { requirementContentFields } from './requirements-ui.js';
+
 const code = text => `<pre class="sg-code">${esc(text)}</pre>`;
 const block = (title, demoHtml, snippet = '', variant = '') => `<div class="sg-block"><h3>${esc(title)}</h3><div class="sg-demo${variant ? ' ' + variant : ''}">${demoHtml}</div>${snippet ? code(snippet) : ''}</div>`;
 const section = (id, title, intro, body) => `<section class="sg-section" id="${id}"><h2>${esc(title)}</h2><p>${esc(intro)}</p>${body}</section>`;
@@ -26,6 +29,7 @@ const sections = [
       "segmented([{ value: 'board', label: '看板', icon: 'board' }, { value: 'list', label: '列表', icon: 'list' }], ui.taskLayout, 'layout')\nswitchToggle('archive-filter', '查看归档', ui.archived)")],
   ['status', '状态与标签', '业务状态到色调的映射只在 ui-kit.js 的 STATUS_TONES 维护；新增状态必须登记，否则测试失败。',
     block('任务阶段', ['wait', 'develop', 'test', 'done', 'terminated'].map(value => badge(value)).join(''), "badge(task.status)   // 中英文状态均可")
+    + block('需求提议', ['待评估', '评估中', '待补充', '暂缓', '不采纳', '已转需求'].map(value => badge(value)).join(''))
     + block('需求流转', ['未确定', '待评审', '已确定', '待排期', '已排期', '开发中', '测试中', '已完成', '已终止'].map(value => badge(value)).join(''))
     + block('账号 / 项目 / 语义', ['active', 'pending', 'disabled'].map(accountStatus).join('') + badge('进行中') + badge('规划中') + toneBadge('danger', '已逾期') + toneBadge('plain', '已归档', { plain: true }), "accountStatus(person.status)\ntoneBadge('danger', '已逾期')")
     + block('优先级与计数', priority('P0') + priority('P1') + priority('P2') + priority('P0', true) + countLabel(29, '项'), "priority(item.priority)          // 表格里\npriority(item.priority, true)    // 详情里带中文说明\ncountLabel(list.length, '项')")
@@ -35,7 +39,9 @@ const sections = [
       "// app.js 中的包装：avatar(id, size) / person(id) 会自动取人员姓名\navatarMark(user.id, user.name, 'lg')\npersonChip(task.ownerId, nameOf(task.ownerId))")],
   ['forms', '表单', '表单放在右侧抽屉里：两列网格，标签在上，说明文字在控件下方；长文本与多选占满整行。',
     block('字段', `<div class="form-grid">${field('需求标题' + REQUIRED, 'sg-title', input('sg-title', '服务质量履约口径与指标', 'maxlength="200"'), true)}${field('优先级', 'sg-priority', select('sg-priority', options(['P0', 'P1', 'P2'], 'P1')))}${field('计划截止', 'sg-end', input('sg-end', '2026-09-30', 'type="date"'))}${field('背景与目标', 'sg-desc', area('sg-desc', '', 'rows="3" placeholder="说明为什么要做"'), true, '提交评审前必须填写。')}<fieldset class="form-field full-width collaborator-field"><legend>协作成员</legend><div class="checklist"><label><input type="checkbox" checked><span>林小满</span></label><label><input type="checkbox"><span>赵一</span></label><label><input type="checkbox"><span>沈知</span></label></div></fieldset></div><div class="form-error">两次输入的密码不一致。</div>`,
-      "field('需求标题' + REQUIRED, 'title', input('title', item?.title || '', 'required maxlength=\"200\"'), true)\nfield('优先级', 'priority', select('priority', options(['P0','P1','P2'], item?.priority)))\nfield('背景与目标', 'description', area('description', value, 'rows=\"3\"'), true, '提交评审前必须填写。')", 'is-stack')],
+      "field('需求标题' + REQUIRED, 'title', input('title', item?.title || '', 'required maxlength=\"200\"'), true)\nfield('优先级', 'priority', select('priority', options(['P0','P1','P2'], item?.priority)))\nfield('背景与目标', 'description', area('description', value, 'rows=\"3\"'), true, '确认需求前必须填写。')", 'is-stack')
+    + block('提议与需求共用内容', `<div class="form-grid">${requirementContentFields({ projectId: 'sg-project', title: '控制台用量导出', priority: 'P1', source: '客户反馈', description: '按所选时间范围导出用量，便于核对账单。', acceptance: '导出范围和页面统计一致。', docRefs: [{ document: '用量需求.md', type: 'PRD', sections: ['EXPORT-1'] }] }, { confirmed: true, documents: [{ id: 'sg-document', projectId: 'sg-project', name: '用量需求.md', title: '用量导出需求说明', type: 'PRD', sections: [{ code: 'EXPORT-1', title: '导出范围与格式' }, { code: 'EXPORT-2', title: '下载记录' }] }] })}</div>`,
+      'requirementContentFields(item, { confirmed, documents })\n// 提议与需求共用布局；确认时背景与验收必填。\n// 关联范围明确区分不关联、全文、指定章节，选择器不打开文档。', 'is-stack')],
   ['feedback', '反馈', '成功 → toast；页面级错误 → #page-alert 里的提示条；表单内错误 → .form-error；空数据 → 空状态并给出下一步。',
     block('提示条', notice('提醒会在打开页面或点击刷新时更新。') + notice('内容已被其他成员更新，请重新载入。', 'danger'), "notice('说明文字')\nnotice('错误说明', 'danger')", 'is-stack')
     + block('Toast', `<div class="toast">${icon('check')}<span>修改已保存。</span></div><div class="toast error">${icon('alert')}<span>无法连接服务器，请检查网络后重试。</span></div>`, "toast('修改已保存。')          // app.js\ntoast('失败原因', true)", 'is-stack')
@@ -45,8 +51,13 @@ const sections = [
       "metricStrip([\n  metric('需求总数', reqs.length, '2 项待确认', 'inbox', 'purple'),\n  metric('逾期任务', late, '截止日期早于今天', 'clock', 'amber', late > 0)\n])", 'is-plain')
     + block('面板 + 列表', panel({ title: '团队账号', count: 3, actionsHtml: button({ label: '创建账号', variant: 'primary', size: 'small', iconName: 'plus' }), bodyHtml: `<div class="table-wrap"><table class="data-table"><thead><tr><th>姓名 / 账号</th><th>状态</th><th>负责任务</th><th><span class="sr-only">操作</span></th></tr></thead><tbody>${[['u-manager', '顾远', 'admin', 'active', 12], ['u-product', '林小满', 'product', 'pending', 5], ['u-dev', '赵一', 'zhao', 'disabled', 0]].map(([id, name, username, status, count]) => `<tr><td><span class="person">${avatarMark(id, name)}<span><strong class="member-title">${esc(name)}</strong><span class="item-meta"><code>${esc(username)}</code></span></span></span></td><td>${accountStatus(status)}</td><td class="num-cell">${count}</td><td class="action-cell">${button({ label: '编辑', variant: 'text' })}</td></tr>`).join('')}</tbody></table></div>`, noteHtml: `${icon('document')}面板备注用于解释统计口径。` }),
       "panel({ title: '团队账号', count: people.length, actionsHtml: button({...}), bodyHtml: tableHtml, noteHtml: '统计口径说明' })", 'is-plain')
-    + block('键值与进度', `<div class="sg-grid-2">${detailList([['负责人', personChip('u-product', '林小满'), true], ['需求点数', 5], ['计划开始', '2026-08-24'], ['计划截止', '2026-09-11']])}<div class="panel panel-pad"><div class="project-progress-label"><span>任务完成率</span><strong>17% · 7 / 41</strong></div>${progress(17, '任务完成率')}</div></div>`,
-      "detailList([['负责人', person(item.ownerId), true], ['需求点数', item.estimatePoints]])\nprogress(percent, '任务完成率')", 'is-plain')],
+    + block('按需求组织研发任务', renderRequirementTaskGroups({
+      requirements: [{ id: 'sg-requirement', title: '控制台用量导出', status: '开发中', assigneeId: 'u-dev', description: '按需求集中查看拆分后的工作。', acceptance: '导出的范围和账单保持一致。', planEnd: '2026-10-12' }],
+      tasks: [{ id: 'sg-task-1', requirementId: 'sg-requirement', title: '实现明细导出', ownerId: 'u-dev', estimateHours: 8, status: 'develop', startDate: '2026-10-01', dueDate: '2026-10-10' }],
+      users: [{ id: 'u-dev', name: '赵一' }], role: 'lead', expandedIds: ['sg-requirement']
+    }), 'renderRequirementTaskGroups({ requirements, tasks, users, role, renderTask, canManage, canSplit, expandedIds })', 'is-plain')
+    + block('键值与进度', `<div class="sg-grid-2">${detailList([['负责人', personChip('u-product', '林小满'), true], ['需求点数', 5], ['计划开始', '2026-08-24'], ['计划截止', '2026-09-11'] ], { columns: 2 })}<div class="panel panel-pad"><div class="project-progress-label"><span>任务完成率</span><strong>17% · 7 / 41</strong></div>${progress(17, '任务完成率')}</div></div>`,
+      "detailList([['负责人', person(item.ownerId), true], ['需求点数', item.estimatePoints]], { columns: 2 })\nprogress(percent, '任务完成率')", 'is-plain')],
   ['patterns', '页面模式', '新页面按下面的结构组合，不要发明新的页面骨架。弹窗通过 openDialog(title, body, footer, variant) 打开。',
     block('页头', heading('需求池', '记录问题、明确验收标准，再将需求拆解为可交付的任务。', button({ label: '新建需求', variant: 'primary', iconName: 'plus' }), '自研 API 聚合平台') + sectionHeading('可访问项目', { count: 3 }),
       "heading('需求池', '一句话说明页面用途', canEdit() ? button({ label: '新建需求', variant: 'primary', iconName: 'plus', action: 'new-requirement' }) : '', projectOf().name)", 'is-stack')

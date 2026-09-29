@@ -72,8 +72,8 @@ test('文档新版本修改了需求关联的章节时，提醒主责开发、�
   actor.tester = { id: 'tester' };
   b.setMember(actor.admin, p.id, { userId: 'tester', role: 'tester', version: b.getProject(actor.admin, p.id).version });
   b.uploadDocument(actor.product, p.id, { name: 'M1.md', type: 'PRD', contentBuffer: file(PRD) });
-  const linked = b.createRequirement(actor.product, { projectId: p.id, title: '流式', ownerId: 'product' });
-  const other = b.createRequirement(actor.product, { projectId: p.id, title: '错误码', ownerId: 'product' });
+  const linked = b.createRequirement(actor.product, { projectId: p.id, title: '流式', description: '背景', acceptance: '验收', ownerId: 'product' });
+  const other = b.createRequirement(actor.product, { projectId: p.id, title: '错误码', description: '背景', acceptance: '验收', ownerId: 'product' });
   db.prepare('UPDATE requirements SET data=json_set(data,\'$.docRefs\',json(?)) WHERE id=?').run(JSON.stringify([{ document: 'M1.md', type: 'PRD', sections: ['GW-2'] }]), linked.id);
   db.prepare('UPDATE requirements SET data=json_set(data,\'$.docRefs\',json(?)) WHERE id=?').run(JSON.stringify([{ document: 'M1.md', type: 'PRD', sections: ['GW-3'] }]), other.id);
   b.uploadDocument(actor.product, p.id, { name: 'M1.md', contentBuffer: file(PRD.replace('旧规则', '新规则')) });
@@ -95,7 +95,7 @@ test('需求接口可写入关联文档章节与验收用例，去重并拒绝�
     const admin = (await auth.bootstrapAdmin({ username: 'doc-admin', name: '管理员', password: 'Doc-Links-2026' })).user ?? db.prepare("SELECT id FROM users WHERE username='doc-admin'").get();
     const b = createBusiness(db);
     const project = b.createProject({ id: admin.id }, { name: '文档关联', targetDate: '2026-12-31' });
-    const req = b.createRequirement({ id: admin.id }, { projectId: project.id, title: '网关', docRefs: [{ document: 'M1-网关.md', type: 'PRD', sections: ['GW-2', 'GW-2', 'GW-3.1'] }, { document: 'M1.feature', type: '验收用例', sections: ['GW-2'] }], acceptanceCases: ['GW-AC-01', 'GW-AC-01'] });
+    const req = b.createRequirement({ id: admin.id }, { projectId: project.id, title: '网关', description: '背景', acceptance: '验收', docRefs: [{ document: 'M1-网关.md', type: 'PRD', sections: ['GW-2', 'GW-2', 'GW-3.1'] }, { document: 'M1.feature', type: '验收用例', sections: ['GW-2'] }], acceptanceCases: ['GW-AC-01', 'GW-AC-01'] });
     assert.deepEqual(req.docRefs[0], { document: 'M1-网关.md', type: 'PRD', sections: ['GW-2', 'GW-3.1'] });
     assert.deepEqual(req.acceptanceCases, ['GW-AC-01']);
     const tech = b.updateRequirement({ id: admin.id }, req.id, { version: req.version, docRefs: [{ document: '算法升级版.md', type: '技术方案', sections: ['§9', '§16.1'] }] });

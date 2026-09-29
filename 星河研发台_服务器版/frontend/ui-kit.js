@@ -69,6 +69,8 @@ export const STATUS_TONES = Object.freeze({
   // requirement workflow
   '未确定': 'review', '待评审': 'review', '已确定': 'plan', '待排期': 'plan', '已排期': 'plan',
   '待开始': 'plan', '开发中': 'progress', '测试中': 'test', '已完成': 'done', '已终止': 'terminated',
+  // proposal evaluation; approval creates a confirmed requirement
+  '待评估': 'review', '评估中': 'progress', '待补充': 'pending', '暂缓': 'plan', '不采纳': 'terminated', '已转需求': 'done',
   // project status
   '规划中': 'plan', '进行中': 'progress',
   // account status
@@ -164,8 +166,8 @@ export function empty(title, description, action = '', actionText = '') {
 export const loading = (text = '正在读取最新内容…') => `<div class="work-loading" role="status">${esc(text)}</div>`;
 /** 提示条：tone info | danger。 */
 export const notice = (text, tone = 'info') => `<div class="notice notice-${tone === 'danger' ? 'danger' : 'info'}"${tone === 'danger' ? ' role="alert"' : ''}><span>${esc(text)}</span></div>`;
-/** 键值网格：detailList([['负责人', personHtml, true], ['点数', 5]])，第三项 true 表示值是安全 HTML。 */
-export const detailList = rows => `<dl class="detail-kv">${rows.map(([label, value, isHtml]) => `<div><dt>${esc(label)}</dt><dd>${isHtml ? value : esc(value)}</dd></div>`).join('')}</dl>`;
+/** 键值网格：第三项 true 表示安全 HTML；{ columns: 2 } 固定双列，手机自动单列。 */
+export const detailList = (rows, { columns } = {}) => `<dl class="detail-kv${columns === 2 ? ' detail-kv-two' : ''}">${rows.map(([label, value, isHtml]) => `<div><dt>${esc(label)}</dt><dd>${isHtml ? value : esc(value)}</dd></div>`).join('')}</dl>`;
 /** 进度条：progress(42, '任务完成率') */
 export const progress = (percent, ariaLabel) => `<div class="progress-track" role="progressbar" aria-label="${esc(ariaLabel)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(percent)}"><div class="progress-fill" style="width:${Math.max(0, Math.min(100, Number(percent) || 0))}%"></div></div>`;
 

@@ -15,6 +15,9 @@ function fixture(t) {
   for (const [userId,role] of [['lead','lead'],['dev','developer'],['dev2','developer'],['viewer','viewer'],['tester','tester']]) p=b.setMember(actor.admin,p.id,{userId,role,version:p.version}).project;
   const q=b.createProject(actor.admin,{name:'另一项目'});
   const requirement=b.createRequirement(actor.product,{projectId:p.id,title:'需求',description:'目标',acceptance:'验收',ownerId:'product',planStart:'2026-09-15',planEnd:'2026-10-15'});
+  // Historical confirmed requirements are not rewritten until a relevant write.
+  requirement.deliveryWorkflow=false;
+  db.prepare('UPDATE requirements SET data=? WHERE id=?').run(JSON.stringify(requirement),requirement.id);
   return {db,b,actor,p,q,requirement};
 }
 function status(code) { return error=>error.status===code; }
@@ -98,47 +101,46 @@ test('未列入项目成员的全局管理员可分配自己，普通非成员�
   db.prepare("INSERT INTO users(id,username,name,role,status,must_change_password) VALUES('admin2','admin2','另一管理员','admin','active',0)").run();
   const admin2={id:'admin2'};
   assert.equal(db.prepare('SELECT count(*) n FROM memberships WHERE user_id=?').get(admin2.id).n,0);
-  const requirement=b.createRequirement(admin2,{projectId:p.id,title:'管理员分配给自己',ownerId:admin2.id,assigneeId:admin2.id,collaboratorIds:[admin2.id]});
+  const requirement=b.createRequirement(admin2,{projectId:p.id,title:'管理员分配给自己',description:'背景',acceptance:'验收',ownerId:admin2.id,assigneeId:admin2.id,collaboratorIds:[admin2.id]});
   assert.equal(requirement.ownerId,admin2.id);
   const task=b.createTask(admin2,{projectId:p.id,requirementId:requirement.id,title:'管理员的任务',ownerId:admin2.id});assert.equal(task.ownerId,admin2.id);
   assert(b.bootstrap(actor.viewer).users.some(user=>user.id===admin2.id));
   assert.throws(()=>b.createRequirement(actor.product,{projectId:p.id,title:'禁止分配普通非成员',ownerId:'other'}),status(400));
 });
 
-test('需求评审、拆分、排期门禁，提测与验收按角色流转，工时点数独立及归档恢复', t=>{
+test('历史确认需求在任务写入时自动流转，工时点数独立、人工验收及归档恢复', t=>{
   const {b,actor,p,requirement}=fixture(t); let r=requirement;
   assert.throws(()=>b.updateRequirement(actor.product,r.id,{version:r.version,status:'已完成'}),status(409));
-  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'待评审'});
-  assert.throws(()=>b.updateRequirement(actor.lead,r.id,{version:r.version,status:'已确定'}),status(403));
-  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'已确定'});
-  assert.throws(()=>b.updateRequirement(actor.lead,r.id,{version:r.version,status:'待排期'}),error=>error.code==='TRANSITION_GATE');
-  assert.throws(()=>b.updateRequirement(actor.product,r.id,{version:r.version,status:'待排期'}),status(403));
+  assert.throws(()=>b.updateRequirement(actor.product,r.id,{version:r.version,status:'待评审'}),error=>error.code==='PROPOSAL_WORKFLOW_REQUIRED');
+  assert.throws(()=>b.updateRequirement(actor.lead,r.id,{version:r.version,status:'待排期'}),error=>error.code==='AUTOMATIC_WORKFLOW');
+  assert.throws(()=>b.updateRequirement(actor.product,r.id,{version:r.version,status:'待排期'}),error=>error.code==='AUTOMATIC_WORKFLOW');
   r=assign(b,actor,r);
-  let task=b.createTask(actor.lead,{projectId:p.id,requirementId:r.id,title:'研发交付',ownerId:'dev',estimateHours:16,estimatePoints:3});
+  let task=b.createTask(actor.lead,{projectId:p.id,requirementId:r.id,title:'研发交付',ownerId:'dev',estimateHours:16,estimatePoints:3,startDate:'2026-09-15',dueDate:'2026-10-15'});
   const unestimated=b.createTask(actor.lead,{projectId:p.id,requirementId:r.id,title:'未估时',ownerId:'dev2'});
-  assert.throws(()=>b.updateRequirement(actor.lead,r.id,{version:r.version,status:'待排期'}),error=>error.code==='TRANSITION_GATE');
+  assert.equal(b.getRequirement(actor.lead,r.id).status,'已确定');
+  assert.throws(()=>b.updateTask(actor.dev,task.id,{version:task.version,status:'develop'}),error=>error.code==='TRANSITION_GATE');
   b.updateTask(actor.lead,unestimated.id,{version:unestimated.version,status:'terminated',reason:'合并'});
-  r=b.updateRequirement(actor.lead,r.id,{version:r.version,status:'待排期'});
-  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'已排期'});
-  r=b.updateRequirement(actor.dev,r.id,{version:r.version,status:'开发中'});
-  assert.throws(()=>b.updateRequirement(actor.dev,r.id,{version:r.version,status:'测试中'}),error=>error.code==='TRANSITION_GATE');
+  r=b.getRequirement(actor.lead,r.id);assert.equal(r.status,'已排期');
   task=b.updateTask(actor.dev,task.id,{version:task.version,status:'develop'});
+  assert.equal(b.getRequirement(actor.lead,r.id).status,'开发中');
   task=b.updateTask(actor.dev,task.id,{version:task.version,status:'test'});
-  r=b.updateRequirement(actor.dev,r.id,{version:r.version,status:'测试中'});
+  r=b.getRequirement(actor.lead,r.id);assert.equal(r.status,'测试中');
   assert.throws(()=>b.updateRequirement(actor.admin,r.id,{version:r.version,status:'已完成'}),error=>error.code==='TRANSITION_GATE');
-  assert.throws(()=>b.updateRequirement(actor.tester,r.id,{version:r.version,status:'开发中'}),status(400));
+  assert.throws(()=>b.updateRequirement(actor.tester,r.id,{version:r.version,status:'开发中'}),error=>error.code==='WORKFLOW_ACTION_REQUIRED');
   assert.throws(()=>b.updateTask(actor.dev,task.id,{version:task.version,status:'done'}),status(403));  // 不能验收自己负责的任务
   assert.throws(()=>b.updateTask(actor.tester,task.id,{version:task.version,title:'测试不能改他人正文',status:'done'}),status(403));
   task=b.updateTask(actor.tester,task.id,{version:task.version,status:'done'});
   assert(task.completedAt); assert.equal(task.estimateHours,16); assert.equal(task.estimatePoints,3);
   assert.throws(()=>b.updateRequirement(actor.viewer,r.id,{version:r.version,status:'已完成'}),status(403));
-  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'已完成'});  // 所有成员都可以验收需求
+  r=b.updateRequirement(actor.product,r.id,{version:r.version,status:'已完成'});
   assert.throws(()=>b.archiveRequirement(actor.lead,r.id,{version:r.version}),status(403));
   r=b.archiveRequirement(actor.product,r.id,{version:r.version});
   assert.equal(b.getTask(actor.dev,task.id).archived,true);
   r=b.archiveRequirement(actor.product,r.id,{version:r.version,archived:false});
   assert.equal(b.getTask(actor.dev,task.id).archived,true);
-  task=b.getTask(actor.dev,task.id);task=b.archiveTask(actor.admin,task.id,{version:task.version,archived:false});assert.equal(task.archived,false);
+  task=b.getTask(actor.dev,task.id);assert.throws(()=>b.archiveTask(actor.admin,task.id,{version:task.version,archived:false}),error=>error.code==='STATE_TRANSITION');
+  b.reopenRequirement(actor.product,r.id,{version:r.version,reason:'恢复归档交付任务'});
+  task=b.archiveTask(actor.admin,task.id,{version:task.version,archived:false});assert.equal(task.archived,false);
 });
 
 test('成员管理限于项目负责人和系统管理员，负责人必须是产品经理或主开发，项目归档阻止写入', t=>{

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { transaction } from './database.mjs';
-import { taskStage } from '../frontend/workflow.js';
+import { taskStage, requirementDeliveryState, REQUIREMENT_REVIEW_ROLES } from '../frontend/workflow.js';
 import { affectedSections } from '../frontend/doc-sections.js';
 
 const DAY = 86400000;
@@ -28,13 +28,16 @@ export function summarizeWork(data,user,date) {
   if(typeof date!=='string'||date.length!==10||today===null)throw Object.assign(new Error('统计日期无效'),{status:400,code:'INVALID_DATE'});
   const projects=data.projects.filter(active), projectIds=new Set(projects.map(item=>item.id));
   const tasks=data.tasks.filter(item=>active(item)&&projectIds.has(item.projectId));
-  const requirements=data.requirements.filter(item=>active(item)&&projectIds.has(item.projectId));
+  const requirements=data.requirements.filter(item=>active(item)&&projectIds.has(item.projectId)&&!['未确定','待评审'].includes(item.status));
   const roles=new Map(data.memberships.filter(item=>item.userId===user.id).map(item=>[item.projectId,item.role]));
   const manager=id=>user.role==='admin'||roles.get(id)==='lead';
   const reviewer=id=>user.role==='admin'||['product','lead','developer','tester'].includes(roles.get(id));
   const lead=id=>roles.get(id)==='lead';
   const assignedTasks=tasks.filter(item=>item.ownerId===user.id&&!finished(item));
-  const assignedRequirements=requirements.filter(item=>!finished(item)&&(item.ownerId===user.id||item.assigneeId===user.id||(item.collaboratorIds||[]).includes(user.id)));
+  const assignedRequirements=requirements.filter(item=>!finished(item)&&(item.ownerId===user.id||item.assigneeId===user.id||(item.collaboratorIds||[]).includes(user.id))).map(item=>{
+    const state=requirementDeliveryState(item,tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id),requirements);
+    return {...item,developmentStart:state.developmentStart,developmentEnd:state.developmentEnd,developmentScheduleComplete:state.scheduleReady};
+  });
   const reviews=tasks.filter(item=>taskStage(item.status)==='test'&&item.ownerId!==user.id&&reviewer(item.projectId));
   const taskById=new Map(tasks.map(item=>[item.id,item]));
   const reminders=[];
@@ -48,14 +51,33 @@ export function summarizeWork(data,user,date) {
     const blocked=(task.dependencyIds||[]).filter(id=>taskStage(taskById.get(id)?.status)!=='done');
     if(blocked.length)reminders.push({id:noticeId(`blocked:${task.id}:${blocked.join(',')}`),kind:'blocked',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:`有 ${blocked.length} 个前置任务尚未完成`,date:task.dueDate||''});
   }
-  // Lead developers split confirmed requirements and review tasks developers added themselves.
-  const splits=requirements.filter(item=>item.status==='已确定'&&lead(item.projectId));
-  for(const item of splits)reminders.push({id:noticeId(`split:${item.id}`),kind:'split',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:'需求已确定，等待拆分任务并指定主责开发',date:item.planStart||''});
+  // Preparation is read from actual task completeness, not a manual plan-submission flag
+  // or commitment dates. Keep the existing splits contract as the lead's planning inbox.
+  const splits=requirements.filter(item=>!finished(item)&&lead(item.projectId)).flatMap(item=>{
+    const linked=tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id);
+    const delivery=requirementDeliveryState(item,linked,requirements);
+    if(delivery.planReady&&delivery.scheduleReady)return [];
+    const planningKind=delivery.planReady?'schedule':'split';
+    const planningGates=delivery.planReady?[`请完善 ${delivery.unscheduledCount??delivery.liveTasks.length} 项有效任务的开始和截止日期`]:delivery.planGates;
+    return [{...item,developmentStart:delivery.developmentStart,developmentEnd:delivery.developmentEnd,developmentScheduleComplete:delivery.scheduleReady,planningKind,planningGates}];
+  });
+  for(const item of splits)reminders.push({id:noticeId(`planning:${item.id}:${item.planningKind}:${item.planningGates.join('|')}`),kind:item.planningKind,entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:item.planningGates.join('；'),date:item.developmentStart||item.planStart||'',openTasks:true});
   const developerIds=new Set(data.memberships.filter(item=>item.role==='developer').map(item=>`${item.projectId}:${item.userId}`));
   for(const task of tasks)if(lead(task.projectId)&&developerIds.has(`${task.projectId}:${task.createdBy}`)&&taskStage(task.status)==='wait')reminders.push({id:noticeId(`added:${task.id}`),kind:'added',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:'开发补充了这个任务，请确认拆分和排期',date:task.dueDate||''});
   // Anyone may test, but only lead developers and testers are nudged, so reminders stay quiet for the rest.
   const nudged=id=>user.role==='admin'||['lead','tester'].includes(roles.get(id));
   for(const task of reviews.filter(item=>nudged(item.projectId)))reminders.push({id:noticeId(`review:${task.id}:${task.version}`),kind:'review',entityType:'task',entityId:task.id,projectId:task.projectId,title:task.title,message:'任务已进入测试，等待验收',date:task.dueDate||''});
+  // Requirement acceptance is a distinct decision after every effective task is done.
+  // Tie identity to the completed delivery scope, not mutable titles/versions or today's date:
+  // rereading or editing content stays quiet; completing rework creates a fresh reminder.
+  for(const item of requirements) {
+    if(item.status!=='测试中'||!(user.role==='admin'||REQUIREMENT_REVIEW_ROLES.includes(roles.get(item.projectId))))continue;
+    const linked=tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id);
+    const delivery=requirementDeliveryState(item,linked,requirements);
+    if(!delivery.readyForAcceptance)continue;
+    const completedScope=delivery.liveTasks.map(task=>[task.id,task.completedAt||'']).sort(([a],[b])=>a.localeCompare(b));
+    reminders.push({id:noticeId(`requirement-review:${item.id}:${JSON.stringify(completedScope)}`),kind:'review',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:'全部有效任务已完成，等待确认需求验收',date:item.planEnd||''});
+  }
   // A new document version that changes sections a requirement references notifies its lead
   // developer, the project's lead developers and testers for 7 days while the requirement is open.
   for(const document of data.documents||[]) {

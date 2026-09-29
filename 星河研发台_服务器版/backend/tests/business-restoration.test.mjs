@@ -13,7 +13,7 @@ function fixture(t) {
   const other = b.createProject(actor.admin, { name: '隔离项目' });
   const create = (title = '需求', projectId = project.id) => b.createRequirement(actor.admin, { projectId, title, description: '背景', acceptance: '验收标准', ownerId: 'admin', assigneeId: 'dev', planStart: '2026-09-01', planEnd: '2026-10-01' });
   const requirement = create();
-  const task = (title = '任务', extra = {}) => b.createTask(actor.admin, { projectId: project.id, requirementId: requirement.id, title, ownerId: 'dev', estimateHours: 8, ...extra });
+  const task = (title = '任务', extra = {}) => b.createTask(actor.admin, { projectId: project.id, requirementId: requirement.id, title, ownerId: 'dev', estimateHours: 8, startDate: '2026-09-01', dueDate: '2026-10-01', ...extra });
   const counts = () => ['tasks','audit','app_meta'].map(table => db.prepare(`SELECT count(*) n FROM ${table}`).get().n);
   return { db, b, actor, project, other, requirement, create, task, counts };
 }
@@ -36,7 +36,7 @@ test('批量拆分全成全败、粒度只提示、需求版本递增和幂等�
   const input = { version: requirement.version, requestId: 'stable-request', tasks: [{ title: '短任务', ownerId: 'dev', estimateHours: 1, estimatePoints: 8 }, { title: '长任务', ownerId: 'dev', estimateHours: 40 }] };
   const result = b.createTaskBatch(actor.lead, requirement.id, input);
   assert.equal(result.tasks.length, 2); assert.equal(result.warnings.length, 2);
-  assert.equal(result.requirement.version, requirement.version + 1);
+  assert.equal(result.requirement.version, requirement.version + 2); // 拆分与自动阶段变化各自保留版本及记录。
   assert.equal(result.tasks[0].estimateHours, 1); assert.equal(result.tasks[0].estimatePoints, 8);
   assert(result.tasks.every(task => task.requirementId === requirement.id));
   const saved = counts();
@@ -85,7 +85,7 @@ test('批量拆分遇到写入中断回滚任务、需求版本、审计与幂�
 
 test('旧历史按真实需求所属项目合并，保留内容并拒绝身份矛盾记录', t => {
   const { db, b, actor, project, other, requirement } = fixture(t);
-  const secret = b.createRequirement(actor.admin, { projectId: other.id, title: '隔离需求' });
+  const secret = b.createRequirement(actor.admin, { projectId: other.id, title: '隔离需求', description: '背景', acceptance: '验收' });
   const legacy = [
     { id: 'h-good', requirementId: requirement.id, actorId: 'dev', actorName: '当时姓名', actorRole: '开发', action: '流转', from: '已排期', to: '开发中', detail: '保留原始说明', at: '2026-09-02T00:00:00Z' },
     { id: 'h-invalid-date', requirementId: requirement.id, actorName: '旧成员', detail: '非法日期仍可追溯', at: '2026-02-30T00:00:00Z' },
@@ -121,7 +121,7 @@ test('改期基线保留最初计划、兼容旧字段且未改期不批量重�
   db.prepare('UPDATE requirements SET data=? WHERE id=?').run(JSON.stringify({ ...current, baseline: legacy }), current.id);
   current = b.updateRequirement(actor.product, current.id, { version: current.version, planEnd: '2026-10-06' });
   assert.deepEqual(current.baseline, legacy); assert.equal(normalizeBaseline(current.baseline).planEnd, '2026-08-31');
-  const without = b.createRequirement(actor.product, { projectId: current.projectId, title: '尚未排期' });
+  const without = b.createRequirement(actor.product, { projectId: current.projectId, title: '尚未排期', description: '背景', acceptance: '验收' });
   const first = b.updateRequirement(actor.product, without.id, { version: without.version, planStart: '2026-09-10', planEnd: '2026-09-20' });
   assert.equal(first.baseline.planStart, '2026-09-10'); assert.equal(first.rescheduleCount, 0); assert(first.baseline.capturedAt);
 });
@@ -163,7 +163,7 @@ test('任务依赖拒绝跨项目、自环和递归环并在开工时检查完�
   assert.throws(() => b.updateTask(actor.dev, first.id, { version: first.version, dependencyIds: [first.id] }), error => error.code === 'DEPENDENCY_CYCLE');
   const third = task('末端任务', { dependencyIds: [second.id] });
   assert.throws(() => b.updateTask(actor.dev, first.id, { version: first.version, dependencyIds: [third.id] }), error => error.code === 'DEPENDENCY_CYCLE');
-  const hiddenRequirement = b.createRequirement(actor.admin, { projectId: other.id, title: '隐藏需求' });
+  const hiddenRequirement = b.createRequirement(actor.admin, { projectId: other.id, title: '隐藏需求', description: '背景', acceptance: '验收' });
   const hidden = b.createTask(actor.admin, { projectId: other.id, requirementId: hiddenRequirement.id, title: '隐藏任务' });
   for (const hiddenId of [hidden.id, 'missing-id']) assert.throws(() => b.createTask(actor.lead, { projectId: project.id, requirementId: first.requirementId, title: '非法引用', dependencyIds: [hiddenId] }), error => error.code === 'INVALID_DEPENDENCY' && error.message === '前置任务必须是本项目现有的未归档任务');
   first = b.updateTask(actor.dev, first.id, { version: first.version, status: 'develop' });

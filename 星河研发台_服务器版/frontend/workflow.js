@@ -10,6 +10,8 @@ export const ROLE_LABELS = Object.freeze({ product: '产品经理', lead: '主�
 export const OWNER_ROLES = Object.freeze(['product', 'lead']);
 // Everyone who works on a project may test: accept or send back tasks and requirements under test.
 export const REVIEW_ROLES = Object.freeze(['product', 'lead', 'developer', 'tester']);
+export const REQUIREMENT_REVIEW_ROLES = Object.freeze(['product', 'lead', 'tester']);
+export const DELIVERY_REQUIREMENT_STATUSES = Object.freeze(REQUIREMENT_STATUSES.filter(status => !['未确定', '待评审'].includes(status)));
 const PERMISSIONS = Object.freeze({
   editRequirement: ['product'],        // create, edit content, archive, upload documents
   planRequirement: ['product', 'lead'], // plan dates, batch reschedule
@@ -17,7 +19,7 @@ const PERMISSIONS = Object.freeze({
   deleteTask: [],                      // only the system administrator may delete/restore tasks
   createOwnTask: ['lead', 'developer'], // add a task owned by oneself under a requirement one takes part in
   reviewTask: REVIEW_ROLES,             // confirm or reopen finished tasks
-  reviewRequirement: REVIEW_ROLES,      // accept or send back requirements under test
+  reviewRequirement: REQUIREMENT_REVIEW_ROLES, // final requirement acceptance is separate from task testing
   uploadDocument: ['product', 'lead'],
 });
 export function roleCan(role, permission) { return role === 'admin' || (PERMISSIONS[permission] || []).includes(role); }
@@ -47,6 +49,23 @@ export function checkRequirementTransition(role, previous, next, { tasks = [], r
   if (!WRITERS.includes(role)) return rejected(403, '当前项目角色无权执行此操作', 'FORBIDDEN');
   if (previous.status === next.status) return accepted();
   const key = `${previous.status}>${next.status}`;
+  if (DELIVERY_REQUIREMENT_STATUSES.includes(previous.status)) {
+    const finalReview = ['测试中>已完成', '测试中>开发中', '已完成>开发中'].includes(key);
+    if (next.status === '已终止') {
+      if (!allows(['product'], role)) return rejected(403, '终止需求需要产品经理', 'FORBIDDEN');
+      return hasText(reason) ? accepted() : rejected(400, '终止需求必须说明原因');
+    }
+    if (key === '已终止>已确定') {
+      if (!allows(['product', 'lead'], role)) return rejected(403, '重启需求需要产品经理或主开发', 'FORBIDDEN');
+      return hasText(reason) ? accepted() : rejected(400, '重新打开需求必须说明原因');
+    }
+    if (!finalReview) return rejected(409, '研发阶段由计划和任务自动同步，请维护研发计划或推进任务', 'AUTOMATIC_WORKFLOW');
+    if (!allows(REQUIREMENT_REVIEW_ROLES, role)) return rejected(403, '需求验收或退回需要产品经理、主开发或测试', 'FORBIDDEN');
+    if (next.status === '开发中') return hasText(reason) ? accepted() : rejected(400, '退回或重新打开需求必须说明原因');
+    const delivery = requirementDeliveryState(next, tasks, dependencies);
+    if (!delivery.readyForAcceptance) return rejected(409, delivery.acceptanceGates.join('；'), 'TRANSITION_GATE');
+    return accepted();
+  }
   if (next.status === '已终止') { if (!allows(['product'], role)) return rejected(403, '终止需求需要产品经理', 'FORBIDDEN'); }
   else if (!REQUIREMENT_RULES[key]) return rejected(409, '不能跳过需求流程，请按当前阶段流转', 'STATE_TRANSITION');
   else if (!allows(REQUIREMENT_RULES[key], role)) return rejected(403, `此流转需要${ROLE_NAMES(REQUIREMENT_RULES[key])}`, 'FORBIDDEN');
@@ -68,11 +87,60 @@ export function checkRequirementTransition(role, previous, next, { tasks = [], r
 
 export function availableRequirementActions(role, requirement, { tasks = [], dependencies = [] } = {}) {
   if (!WRITERS.includes(role) || requirement.archived) return [];
-  const targets = [...Object.keys(REQUIREMENT_RULES).filter(key => key.startsWith(requirement.status + '>')).map(key => key.split('>')[1]), ...(requirement.status === '已终止' ? [] : ['已终止'])];
+  const targets = DELIVERY_REQUIREMENT_STATUSES.includes(requirement.status)
+    ? [...(requirement.status === '测试中' ? ['开发中', '已完成'] : requirement.status === '已完成' ? ['开发中'] : requirement.status === '已终止' ? ['已确定'] : []), ...(requirement.status === '已终止' ? [] : ['已终止'])]
+    : [...Object.keys(REQUIREMENT_RULES).filter(key => key.startsWith(requirement.status + '>')).map(key => key.split('>')[1]), ...(requirement.status === '已终止' ? [] : ['已终止'])];
   return targets.map(status => {
     const check = checkRequirementTransition(role, requirement, { ...requirement, status }, { tasks, dependencies, reason: '待填写' });
-    return { status, label: status, allowed: check.ok, message: check.message || '', code: check.code || '', requiresReason: status === '已终止' || REQUIREMENT_REASON.has(`${requirement.status}>${status}`) };
+    return { status, label: status, allowed: check.ok, message: check.message || '', code: check.code || '', requiresReason: status === '已终止' || REQUIREMENT_REASON.has(`${requirement.status}>${status}`) || requirement.status === '已终止' };
   }).filter(item => item.code !== 'FORBIDDEN');
+}
+
+// Confirmed requirements follow their tasks. The commitment dates remain owned by
+// the requirement; development dates below are a separate projection of its tasks.
+export function requirementDeliveryState(requirement, tasks = [], dependencies = []) {
+  const liveTasks = tasks.filter(task => !task.archived && (!task.requirementId || task.requirementId === requirement.id) && taskStage(task.status) !== 'terminated');
+  const counts = { wait: 0, develop: 0, test: 0, done: 0, total: liveTasks.length };
+  for (const task of liveTasks) if (Object.hasOwn(counts, taskStage(task.status))) counts[taskStage(task.status)] += 1;
+  const planGates = [];
+  if (!requirement.assigneeId) planGates.push('请指定主责开发');
+  if (!liveTasks.length) planGates.push('没有有效交付任务，请补充任务或终止需求');
+  if (liveTasks.some(task => !task.ownerId || !(Number(task.estimateHours) > 0))) planGates.push('每个有效任务都需要负责人和大于零的预估工时');
+  if (!hasText(requirement.acceptance)) planGates.push('请填写需求验收标准');
+  const scheduledCount = liveTasks.filter(task => validDate(task.startDate) && validDate(task.dueDate) && task.startDate <= task.dueDate).length;
+  const unscheduledCount = liveTasks.length - scheduledCount;
+  const datedTasks = liveTasks.map(task => { const start = validDate(task.startDate), end = validDate(task.dueDate); return start && end && start > end ? { start: '', end: '' } : { start, end }; });
+  const starts = datedTasks.map(task => task.start).filter(Boolean).sort();
+  const ends = datedTasks.map(task => task.end).filter(Boolean).sort();
+  const developmentStart = starts[0] || '', developmentEnd = ends.at(-1) || '';
+  const commitmentEnd = validDate(requirement.planEnd);
+  const delayDays = developmentEnd && commitmentEnd ? Math.max(0, Math.round((Date.parse(`${developmentEnd}T00:00:00Z`) - Date.parse(`${commitmentEnd}T00:00:00Z`)) / 86400000)) : null;
+  const planReady = !planGates.length, scheduleReady = Boolean(liveTasks.length && !unscheduledCount);
+  const hasStarted = Boolean(requirement.deliveryStartedAt || ['开发中', '测试中', '已完成'].includes(requirement.status) || counts.develop || counts.test || counts.done);
+  const byId = new Map(dependencies.filter(Boolean).map(item => [item.id, item]));
+  const pendingDependencies = (requirement.dependencyIds || []).filter(id => { const item = byId.get(id); return !item || item.archived || item.status !== '已完成'; });
+  const startGates = hasStarted ? [] : [...planGates];
+  if (!hasStarted && !scheduleReady) startGates.push('请为所有有效任务填写完整的计划起止日期');
+  if (pendingDependencies.length) startGates.push('前置需求尚未完成');
+  const acceptanceGates = [];
+  if (!liveTasks.length) acceptanceGates.push('没有有效交付任务，不能完成需求');
+  else if (counts.done !== counts.total) acceptanceGates.push('所有有效任务完成后才能验收需求');
+  if (!hasText(requirement.acceptance)) acceptanceGates.push('请填写需求验收标准');
+  if (requirement.workflowHold) acceptanceGates.push('需求已重新打开，请安排返工任务');
+  const readyForAcceptance = !acceptanceGates.length;
+  const gates = [...planGates];
+  if (!scheduleReady) gates.push('请为所有有效任务填写完整的计划起止日期');
+  if (pendingDependencies.length) gates.push('前置需求尚未完成');
+  if (requirement.workflowHold) gates.push('需求已重新打开，请安排返工任务');
+  let status = requirement.status;
+  const enabled = DELIVERY_REQUIREMENT_STATUSES.includes(status);
+  // Historical rows keep their displayed state until the first relevant write
+  // adopts automatic delivery. Reads never silently rewrite their history.
+  if (enabled && requirement.deliveryWorkflow === true && !requirement.archived && !['已完成', '已终止'].includes(status)) {
+    if (hasStarted) status = liveTasks.length && counts.test + counts.done === counts.total && hasText(requirement.acceptance) && !requirement.workflowHold ? '测试中' : '开发中';
+    else status = !planReady ? '已确定' : scheduleReady ? '已排期' : '待排期';
+  }
+  return { status, enabled, planSubmitted: Boolean(requirement.planSubmitted), planReady, scheduleReady, hasStarted, developmentStart, developmentEnd, scheduledCount, unscheduledCount, delayDays, startAllowed: !startGates.length, readyForAcceptance, gates, planGates, startGates, acceptanceGates, pendingDependencies, liveTasks, counts };
 }
 
 // ownTask: the actor owns the task. Only the lead developer may confirm their own work (pure technical tasks).

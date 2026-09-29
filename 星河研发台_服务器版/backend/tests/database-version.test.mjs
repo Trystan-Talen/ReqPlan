@@ -3,18 +3,36 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {openDatabase} from '../database.mjs';
+import {openDatabase, SCHEMA_VERSION} from '../database.mjs';
 import {DatabaseSync} from 'node:sqlite';
 
 test('数据库结构版本持久保存，拒绝降级打开未来版本',()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'xinghe-schema-'));
   const file=path.join(dir,'data.sqlite');
   try{
-    let db=openDatabase(file);assert.equal(db.prepare('PRAGMA user_version').get().user_version,4);db.close();
-    db=openDatabase(file);db.exec('PRAGMA user_version=5');db.close();
+    let db=openDatabase(file);assert.equal(db.prepare('PRAGMA user_version').get().user_version,SCHEMA_VERSION);db.close();
+    db=openDatabase(file);db.exec(`PRAGMA user_version=${SCHEMA_VERSION+1}`);db.close();
     assert.throws(()=>openDatabase(file),/不能降级/);
-    const future=new DatabaseSync(file,{readOnly:true});assert.equal(future.prepare('PRAGMA user_version').get().user_version,5);future.close();
+    const future=new DatabaseSync(file,{readOnly:true});assert.equal(future.prepare('PRAGMA user_version').get().user_version,SCHEMA_VERSION+1);future.close();
   }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('第四版升级只添加提议表，保留旧需求状态、编号、任务和附件关联', t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'xinghe-intake-migrate-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const file=path.join(dir,'data.sqlite');let db=openDatabase(file);
+  db.prepare('INSERT INTO projects(id,data) VALUES(?,?)').run('p','{"name":"保留项目"}');
+  const original=JSON.stringify({id:'r',projectId:'p',title:'未确认内容',status:'待评审'});
+  db.prepare('INSERT INTO requirements(id,project_id,data) VALUES(?,?,?)').run('r','p',original);
+  db.prepare('INSERT INTO tasks(id,project_id,requirement_id,data) VALUES(?,?,?,?)').run('t','p','r','{}');
+  db.prepare('INSERT INTO attachments(id,requirement_id,project_id,name,mime,content) VALUES(?,?,?,?,?,?)').run('a','r','p','附件','text/plain',Buffer.from('原文'));
+  db.exec('DROP TABLE proposals;PRAGMA user_version=4');db.close();db=openDatabase(file);
+  try {
+    assert.equal(db.prepare('SELECT data FROM requirements WHERE id=?').get('r').data,original);
+    assert.equal(db.prepare('SELECT requirement_id FROM tasks WHERE id=?').get('t').requirement_id,'r');
+    assert.equal(Buffer.from(db.prepare('SELECT content FROM attachments WHERE id=?').get('a').content).toString(),'原文');
+    assert.equal(db.prepare('SELECT count(*) n FROM proposals').get().n,0);
+    assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
+  } finally { db.close(); }
 });
 
 test('第一版附件安全升级，同名同类型成链且旧地址字节不变',()=>{

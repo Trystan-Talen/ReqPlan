@@ -2,7 +2,7 @@
 // 按计划文件为需求批量创建研发任务并排期。默认只预检（输出排期与负载），--apply 才写入；
 // 写入前自动备份，已有任务的需求整条跳过，不会重复创建，也不改动需求内容。
 // --replace：用新计划替换「尚未开工」的旧任务（全部为待开始且从未修改），旧任务归档保留；
-// 旧计划从未执行，因此需求基线同时重置为新计划。只要有一个任务动过，整条需求保持不变。
+// 只替换任务研发日期，需求交付承诺和基线始终保留。只要有一个任务动过，整条需求保持不变。
 //   npm run plan:tasks -- [--plan 计划文件] [--db 数据库] [--apply] [--replace] [--actor 用户名]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -72,6 +72,10 @@ export function schedulePlan(plan) {
 
 function argument(name, fallback) { const index = process.argv.indexOf(name); return index > 0 ? process.argv[index + 1] : fallback; }
 
+export function requirementDevelopmentPatch(entry, userIds, version) {
+  return { version, assigneeId: userIds.get(entry.assignee), collaboratorIds: entry.collaborators.map(owner => userIds.get(owner)) };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const planFile = path.resolve(argument('--plan', path.join(HERE, '..', 'migrations', 'task-plan-2026-09-18.json')));
@@ -109,7 +113,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       if (late.length) console.info('\n晚于项目目标日期：\n' + late.join('\n'));
       if (skipped.length) console.info('\n跳过：\n' + skipped.join('\n'));
       const replacing = schedule.requirements.filter(entry => entry.replacing);
-      if (replacing.length) console.info(`\n将替换 ${replacing.length} 条需求下尚未开工的 ${replacing.reduce((sum, entry) => sum + entry.oldTasks.length, 0)} 个旧任务（归档保留），基线重置为新计划。`);
+      if (replacing.length) console.info(`\n将替换 ${replacing.length} 条需求下尚未开工的 ${replacing.reduce((sum, entry) => sum + entry.oldTasks.length, 0)} 个旧任务（归档保留），需求交付承诺和基线保持原值。`);
       if (!apply) console.info('\n以上为预检，没有写入。确认后追加 --apply。');
       else {
       const backup = path.join(path.dirname(databasePath), 'backups', `before-task-plan-${new Date().toISOString().replace(/[:.]/g, '-')}.sqlite`);
@@ -127,15 +131,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
         const version = () => db.prepare('SELECT version FROM requirements WHERE id=?').get(entry.id).version;
         business.createTaskBatch(actor, entry.id, { version: version(), requestId: `task-plan-${path.basename(planFile, '.json')}-${entry.id}`, tasks: entry.tasks.map(item => ({ title: item.title, ownerId: userIds.get(item.owner), startDate: item.startDate, dueDate: item.dueDate, estimateHours: item.hours, description: item.desc || '' })) });
         created += entry.tasks.length;
-        const current = JSON.parse(db.prepare('SELECT data FROM requirements WHERE id=?').get(entry.id).data);
-        const target = projects.get(entry.projectId).targetDate;
-        business.updateRequirement(actor, entry.id, { version: version(), assigneeId: userIds.get(entry.assignee), collaboratorIds: entry.collaborators.map(owner => userIds.get(owner)), planStart: entry.planStart, planEnd: entry.planEnd, ...(current.status === '已确定' ? { status: '已排期' } : {}), ...(target && entry.planEnd > target ? { force: true } : {}) });
-        if (entry.replacing) {
-          const row = db.prepare('SELECT data FROM requirements WHERE id=?').get(entry.id), data = JSON.parse(row.data);
-          data.baseline = { planStart: entry.planStart, planEnd: entry.planEnd, capturedAt: new Date().toISOString() }; data.rescheduleCount = 0;
-          db.prepare('UPDATE requirements SET data=?,version=version+1,updated_at=? WHERE id=?').run(JSON.stringify(data), new Date().toISOString(), entry.id);
-          db.prepare('INSERT INTO audit(user_id,action,entity_type,entity_id,detail,created_at) VALUES(?,?,?,?,?,?)').run(actor.id, 'rebaseline', 'requirement', entry.id, JSON.stringify({ projectId: entry.projectId, reason: `以 ${path.basename(planFile)} 替换尚未开工的任务计划`, baseline: data.baseline }), new Date().toISOString());
-        }
+        business.updateRequirement(actor, entry.id, requirementDevelopmentPatch(entry, userIds, version()));
         scheduled++;
       }
       console.info(`已创建 ${created} 个任务，排期 ${scheduled} 条需求${archived ? `，归档 ${archived} 个尚未开工的旧任务` : ''}（执行账号 ${names.get(actor.id)}）。`);

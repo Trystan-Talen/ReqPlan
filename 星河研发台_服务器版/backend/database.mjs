@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { PROJECT_ROLES } from '../frontend/workflow.js';
 
 const NOW = "(strftime('%Y-%m-%dT%H:%M:%fZ','now'))";
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 export const ROLE_MIGRATION_KEY = 'role_migration_v3';
 const MEMBERSHIPS_TABLE = name => `CREATE TABLE ${name} (
         project_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id),
@@ -210,6 +210,19 @@ export function openDatabase(path) {
         UNIQUE(document_id,version)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS documents_project ON documents(project_id);
+    `);
+    // Version 5 adds intake without rewriting legacy requirement IDs or their links.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS proposals (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id),
+        data TEXT NOT NULL CHECK(json_valid(data)), created_by TEXT REFERENCES users(id),
+        requirement_id TEXT UNIQUE, legacy_requirement_id TEXT UNIQUE,
+        version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0), archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
+        created_at TEXT NOT NULL DEFAULT ${NOW}, updated_at TEXT NOT NULL DEFAULT ${NOW},
+        FOREIGN KEY(requirement_id,project_id) REFERENCES requirements(id,project_id),
+        FOREIGN KEY(legacy_requirement_id,project_id) REFERENCES requirements(id,project_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS proposals_project ON proposals(project_id,archived);
     `);
     db.exec(`PRAGMA user_version=${SCHEMA_VERSION}; COMMIT;`);
     return db;

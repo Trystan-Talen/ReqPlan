@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { workCalendar, schedulePlan } from '../scripts/plan-tasks.mjs';
+import { workCalendar, schedulePlan, requirementDevelopmentPatch } from '../scripts/plan-tasks.mjs';
+
+test('任务排期导入只维护研发分工，不覆盖需求状态、交付承诺或基线', () => {
+  const entry = { assignee: 'amy', collaborators: ['bob'], planStart: '2026-09-01', planEnd: '2026-10-31' };
+  assert.deepEqual(requirementDevelopmentPatch(entry, new Map([['amy', 'u-a'], ['bob', 'u-b']]), 7), { version: 7, assigneeId: 'u-a', collaboratorIds: ['u-b'] });
+});
 
 test('工作日历跳过周末与节假日', () => {
   assert.deepEqual(workCalendar('2026-11-05', ['2026-11-09']).slice(0, 4), ['2026-11-05', '2026-11-06', '2026-11-10', '2026-11-11']);

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../database.mjs';
 import { createBusiness } from '../business.mjs';
-import { checkRequirementTransition, availableRequirementActions } from '../../frontend/workflow.js';
+import { requirementDeliveryState } from '../../frontend/workflow.js';
 
 function fixture(t) {
   const db=openDatabase(':memory:'); t.after(()=>db.close());
@@ -12,21 +12,20 @@ function fixture(t) {
   let project=b.createProject(actor.admin,{name:'需求依赖项目'});
   for(const [userId,role] of [['product','product'],['lead','lead'],['dev','developer'],['tester','tester'],['viewer','viewer']])project=b.setMember(actor.admin,project.id,{userId,role,version:project.version}).project;
   const other=b.createProject(actor.admin,{name:'隐藏项目'});
-  const create=(title,extra={})=>b.createRequirement(actor.product,{projectId:project.id,title,description:'背景目标',acceptance:'验收标准',planStart:'2026-09-16',planEnd:'2026-09-30',...extra});
+  // Legacy confirmed rows adopt automatic stages on their next relevant write.
+  const create=(title,extra={})=>{const requirement=b.createRequirement(actor.product,{projectId:project.id,title,description:'背景目标',acceptance:'验收标准',planStart:'2026-09-16',planEnd:'2026-09-30',...extra});requirement.deliveryWorkflow=false;db.prepare('UPDATE requirements SET data=? WHERE id=?').run(JSON.stringify(requirement),requirement.id);return requirement;};
   const move=(requirement,status,who='product',extra={})=>b.updateRequirement(actor[who],requirement.id,{version:requirement.version,status,...extra});
   const schedule=requirement=>{
-    requirement=move(requirement,'待评审');requirement=move(requirement,'已确定');
     requirement=b.updateRequirement(actor.lead,requirement.id,{version:requirement.version,assigneeId:'dev'});
-    const task=b.createTask(actor.lead,{projectId:project.id,requirementId:requirement.id,title:'关联任务',ownerId:'dev',estimateHours:8});
-    requirement=move(requirement,'待排期','lead');requirement=move(requirement,'已排期');
+    const task=b.createTask(actor.lead,{projectId:project.id,requirementId:requirement.id,title:'关联任务',ownerId:'dev',estimateHours:8,startDate:'2026-09-16',dueDate:'2026-09-30'});
+    requirement=b.getRequirement(actor.lead,requirement.id);
     return {requirement,task};
   };
   const complete=({requirement,task})=>{
     task=b.updateTask(actor.dev,task.id,{version:task.version,status:'develop'});
     task=b.updateTask(actor.dev,task.id,{version:task.version,status:'test'});
-    requirement=move(requirement,'开发中','dev');requirement=move(requirement,'测试中','dev');
     b.updateTask(actor.tester,task.id,{version:task.version,status:'done'});
-    return move(requirement,'已完成','tester');
+    return move(b.getRequirement(actor.tester,requirement.id),'已完成','tester');
   };
   return {db,b,actor,project,other,create,move,schedule,complete};
 }
@@ -43,7 +42,7 @@ test('需求依赖默认空数组，合法同项目引用去重且字段格式�
 
 test('需求依赖不泄露跨项目编号存在性，归档或不存在记录不可新引用',t=>{
   const {b,actor,other,create}=fixture(t);
-  const hidden=b.createRequirement(actor.admin,{projectId:other.id,title:'隐藏需求'});
+  const hidden=b.createRequirement(actor.admin,{projectId:other.id,title:'隐藏需求',description:'背景',acceptance:'验收'});
   let archived=create('归档需求');archived=b.archiveRequirement(actor.product,archived.id,{version:archived.version});
   for(const dependencyId of [hidden.id,archived.id,'missing-requirement'])assert.throws(()=>create('非法引用',{dependencyIds:[dependencyId]}),error=>error.code==='INVALID_DEPENDENCY'&&error.message==='前置需求必须是本项目现有的未归档需求');
 });
@@ -78,11 +77,10 @@ test('已排期需求在前置需求验收完成后才可开工，原验收角�
   const predecessor=schedule(create('前置交付'));
   const scheduled=schedule(create('后续交付',{dependencyIds:[predecessor.requirement.id]}));let dependent=scheduled.requirement;
   assert.equal(dependent.status,'已排期');
-  assert.throws(()=>move(dependent,'开发中','dev'),error=>error.status===409&&error.code==='DEPENDENCY_GATE');
+  assert.throws(()=>b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'}),error=>error.status===409&&error.code==='DEPENDENCY_GATE');
   const completed=complete(predecessor);assert.equal(completed.status,'已完成');
-  dependent=move(dependent,'开发中','dev');assert.equal(dependent.status,'开发中');
-  let task=b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'});b.updateTask(actor.dev,task.id,{version:task.version,status:'test'});
-  dependent=move(dependent,'测试中','lead');
+  let task=b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'});assert.equal(b.getRequirement(actor.dev,dependent.id).status,'开发中');b.updateTask(actor.dev,task.id,{version:task.version,status:'test'});
+  dependent=b.getRequirement(actor.lead,dependent.id);assert.equal(dependent.status,'测试中');
   assert.throws(()=>move(dependent,'已完成','product'),error=>error.code==='TRANSITION_GATE');
   assert.throws(()=>move(dependent,'已完成','tester'),error=>error.code==='TRANSITION_GATE');
   assert.deepEqual(b.getRequirement(actor.viewer,dependent.id).dependencyIds,[completed.id]);
@@ -91,32 +89,34 @@ test('已排期需求在前置需求验收完成后才可开工，原验收角�
 test('终止前置需求不等于完成，经理或产品可以显式解除依赖',t=>{
   const {b,actor,create,move,schedule}=fixture(t);
   let predecessor=create('取消需求');
-  const dependent=schedule(create('后续需求',{dependencyIds:[predecessor.id]})).requirement;
+  const scheduled=schedule(create('后续需求',{dependencyIds:[predecessor.id]})),dependent=scheduled.requirement;
   predecessor=move(predecessor,'已终止','product',{reason:'范围取消'});
-  assert.throws(()=>move(dependent,'开发中','dev'),error=>error.code==='DEPENDENCY_GATE');
+  assert.throws(()=>b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'}),error=>error.code==='DEPENDENCY_GATE');
   const cleared=b.updateRequirement(actor.product,dependent.id,{version:dependent.version,dependencyIds:[]});
-  assert.equal(move(cleared,'开发中','dev').status,'开发中');
+  b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'});
+  assert.equal(b.getRequirement(actor.dev,cleared.id).status,'开发中');
 });
 
 test('旧需求缺失依赖字段读操作不改库且无依赖流程继续兼容',t=>{
   const {db,b,actor,create,move,schedule}=fixture(t);
-  const requirement=schedule(create('旧版需求')).requirement;
+  const scheduled=schedule(create('旧版需求')),requirement=scheduled.requirement;
   const data=JSON.parse(db.prepare('SELECT data FROM requirements WHERE id=?').get(requirement.id).data);delete data.dependencyIds;
   const original=JSON.stringify(data);db.prepare('UPDATE requirements SET data=? WHERE id=?').run(original,requirement.id);
   b.bootstrap(actor.dev);b.getRequirement(actor.dev,requirement.id);
   assert.equal(db.prepare('SELECT data FROM requirements WHERE id=?').get(requirement.id).data,original);
-  const updated=move(requirement,'开发中','dev');assert.equal(updated.status,'开发中');assert.deepEqual(updated.dependencyIds,[]);
+  b.updateTask(actor.dev,scheduled.task.id,{version:scheduled.task.version,status:'develop'});
+  const updated=b.getRequirement(actor.dev,requirement.id);assert.equal(updated.status,'开发中');assert.deepEqual(updated.dependencyIds||[],[]);
 });
 
 test('前后端共享需求门禁按关联编号解析依赖，缺失或归档记录不可绕过',()=>{
   const requirement={status:'已排期',assigneeId:'dev',planStart:'2026-09-16',planEnd:'2026-09-30',acceptance:'标准',dependencyIds:['before']};
-  const next={...requirement,status:'开发中'},tasks=[{status:'wait'}];
+  const tasks=[{status:'wait',ownerId:'dev',estimateHours:8,startDate:'2026-09-16',dueDate:'2026-09-30'}];
   for(const dependencies of [[],[null],[{id:'other',status:'已完成'}],[{id:'before',status:'已终止'}],[{id:'before',status:'已完成',archived:true}]]){
-    assert.equal(checkRequirementTransition('developer',requirement,next,{tasks,dependencies}).code,'DEPENDENCY_GATE');
-    assert.equal(availableRequirementActions('developer',requirement,{tasks,dependencies}).find(item=>item.status==='开发中').allowed,false);
+    assert.equal(requirementDeliveryState(requirement,tasks,dependencies).startAllowed,false);
+    assert.deepEqual(requirementDeliveryState(requirement,tasks,dependencies).pendingDependencies,['before']);
   }
   const dependencies=[{id:'before',status:'已完成'}];
-  assert.equal(checkRequirementTransition('developer',requirement,next,{tasks,dependencies}).ok,true);
-  assert.equal(availableRequirementActions('developer',requirement,{tasks,dependencies}).find(item=>item.status==='开发中').allowed,true);
-  assert.equal(checkRequirementTransition('developer',requirement,next,{tasks:[],dependencies}).code,'TRANSITION_GATE');
+  assert.equal(requirementDeliveryState(requirement,tasks,dependencies).startAllowed,true);
+  assert.deepEqual(requirementDeliveryState(requirement,tasks,dependencies).pendingDependencies,[]);
+  assert.equal(requirementDeliveryState(requirement,[],dependencies).startAllowed,false);
 });

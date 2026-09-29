@@ -14,7 +14,7 @@ const sorted=value=>JSON.stringify(value.map(item=>JSON.stringify(item)).sort())
 const columns=(db,table)=>db.prepare(`PRAGMA table_info(${quote(table)})`).all().map(({name,type,notnull,pk})=>({name,type,notnull,pk}));
 const foreignKeys=(db,table)=>db.prepare(`PRAGMA foreign_key_list(${quote(table)})`).all().map(({seq,table:target,from,to,on_update,on_delete,match})=>({seq,target,from,to,on_update,on_delete,match}));
 const normalizeSql=value=>String(value).replace(/\s+/g,' ').trim().toLowerCase();
-const tableIntroducedIn={attachment_imports:2,documents:4,document_versions:4};
+const tableIntroducedIn={attachment_imports:2,documents:4,document_versions:4,proposals:5};
 
 // This is a recovery rehearsal, never a replacement of the running database. Both
 // migration probes and write checks run exclusively inside an isolated temp dir.

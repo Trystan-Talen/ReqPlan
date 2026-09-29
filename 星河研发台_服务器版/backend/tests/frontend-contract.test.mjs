@@ -11,8 +11,13 @@ import * as workflow from '../../frontend/workflow.js';
 import * as reviewUI from '../../frontend/review-ui.js';
 import * as batchUI from '../../frontend/task-batch.js';
 import * as workUI from '../../frontend/work-ui.js';
-import {renderDocumentPreview} from '../../frontend/document-preview.js';
+import {renderDocumentPreview,renderFeaturePreview} from '../../frontend/document-preview.js';
+import * as docSections from '../../frontend/doc-sections.js';
 import * as portfolioUI from '../../frontend/portfolio.js';
+import * as taskGroupsUI from '../../frontend/task-groups.js';
+import * as requirementUI from '../../frontend/requirements-ui.js';
+import * as documentsUI from '../../frontend/documents-ui.js';
+import * as documentLinkFields from '../../frontend/document-link-fields.js';
 import * as uiKit from '../../frontend/ui-kit.js';
 import {webcrypto} from 'node:crypto';
 
@@ -40,7 +45,7 @@ async function fixture(t,{initialize=true,setupToken='',hash='#/team',recoveryLi
   class MockForm {constructor(kind,entries,id=''){this.dataset={kind,id,projectId:'p-exec'};this.entries=Object.entries(entries);this.id='entity-form';}querySelector(selector){return element(selector);}}
   class MockFormData {constructor(form){this.values=form.entries;}[Symbol.iterator](){return this.values[Symbol.iterator]();}getAll(key){return this.values.filter(entry=>entry[0]===key).map(entry=>entry[1]);}}
   const api=async(path,options={})=>{const result=await request('/api'+path,options);if(!result.ok)throw Object.assign(new Error(result.data.error),{status:result.status,code:result.data.code});return result.data;};
-  const context=vm.createContext({...uiKit,...portfolioUI,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
+  const context=vm.createContext({...uiKit,...taskGroupsUI,...requirementUI,...documentsUI,...documentLinkFields,...docSections,...portfolioUI,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,renderFeaturePreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,text:async()=>response.bytes.toString(),arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
   const source=fs.readFileSync(new URL('../../frontend/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace(/\nboot\(\);\s*$/,'');
   vm.runInContext(source,context);
   if(admin){
@@ -181,7 +186,7 @@ test('本人重置密码先保留一次性链接，关闭后才返回登录',asy
   assert.equal((await f.app.auth.login({username:'manager',password:'Reset-Account-Only!2026',ip:'test'})).user.id,adminId);
 });
 
-test('开发人员通过实际表单流转本人需求，只修改允许字段',async t=>{
+test('编辑需求表单不允许通过旧状态字段静默推进流程',async t=>{
   const f=await fixture(t);
   const req=f.run('data.requirements.find(item=>item.status==="开发中"&&data.memberships.some(m=>m.projectId===item.projectId&&m.userId===item.assigneeId&&m.role==="developer"))');
   assert.ok(req,'真实快照中需有指派给开发的进行中需求');
@@ -191,7 +196,7 @@ test('开发人员通过实际表单流转本人需求，只修改允许字段',
     for(const next of ({wait:['develop','test'],'待开始':['develop','test'],develop:['test'],'开发中':['test']}[task.status]||[]))task=f.app.business.updateTask(f.run('user'),task.id,{version:task.version,status:next});
   }
   await f.become(req.assigneeId);
-  f.context.form=new f.MockForm('requirements',{status:'测试中',reason:'提交验收'},req.id);
+  f.context.form=new f.MockForm('requirements',{status:'已完成',reason:'旧表单伪造状态'},req.id);
   await f.run('saveEntity(form)');
   const saved=f.app.business.getRequirement(f.run('user'),req.id);
   assert.equal(saved.status,'测试中');assert.equal(saved.title,req.title);assert.equal(saved.assigneeId,req.assigneeId);
@@ -475,7 +480,8 @@ test('自动同步：只读页面拉取他人修改后重绘，打开弹窗或�
   assert.doesNotMatch(f.element('#app').innerHTML,/弹窗期间的新名字/);
   assert.equal(f.run('projectOf("p-exec").name'),'同事改过的项目名');
   f.element('#dialog').open=false;f.run('route={view:"requirements",projectId:"p-exec"};');
-  assert.equal(f.run('canAutoRefresh()'),false);
+  assert.equal(f.run('canAutoRefresh()'),true);
+  f.element('active').tagName='INPUT';assert.equal(f.run('canAutoRefresh()'),false);
 });
 
 test('主开发编辑转派并查看修改记录，只有管理员看到删除入口且可确认删除恢复',async t=>{
@@ -483,7 +489,7 @@ test('主开发编辑转派并查看修改记录，只有管理员看到删除�
   const project=f.app.business.getProject(admin,'p-exec');
   const lead=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
   f.app.business.setMember(admin,'p-exec',{userId:lead,role:'lead',version:project.version});
-  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'任务编辑验证需求'});
+  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'任务编辑验证需求',description:'已确认的工作',acceptance:'交付验收通过'});
   await f.become(lead);
   let task=f.app.business.createTask({id:lead},{projectId:'p-exec',requirementId:req.id,title:'待修正任务',description:'原始任务内容',ownerId:lead});
   await f.run('reload()');f.context.taskId=task.id;f.run('route={view:"tasks",projectId:"p-exec"};');
@@ -566,7 +572,7 @@ test('全局甘特图首次渲染测量实际轨道宽度；溢出时允许拖�
 
 test('任务历史接口按项目鉴权，保留修改人姓名与前后内容，详情转义用户内容',async t=>{
   const f=await fixture(t),admin=f.run('user');
-  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'历史验证'});
+  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'历史验证',description:'已确认的工作',acceptance:'交付验收通过'});
   let task=f.app.business.createTask(admin,{projectId:'p-exec',requirementId:req.id,title:'修改前标题',description:'修改前内容'});
   task=f.app.business.updateTask(admin,task.id,{version:task.version,title:'修改后标题',description:'<script>不应执行</script>',reason:'修正任务范围'});
   // Audit snapshots retain the name even after the account is renamed.
@@ -586,4 +592,140 @@ test('任务历史接口按项目鉴权，保留修改人姓名与前后内容�
   assert.equal(f.run('taskRemovalButton(data.tasks.find(t=>t.id===taskId))'),'');
   f.db.prepare('DELETE FROM memberships WHERE project_id=? AND user_id=?').run('p-exec',member);
   assert.equal((await f.request('/api/tasks/'+task.id+'/history')).status,403);
+});
+
+test('真实提交事件拦截默认导航：开发新建提议到产品确认转入详情，保留提出人',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const developer=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  await f.become(developer);await f.run('reload()');
+  f.run('route={view:"proposals",projectId:"p-exec"};renderShell()');
+  assert.match(f.element('#view').innerHTML,/提交提议/);
+  f.run('editProposal()');assert.doesNotMatch(f.element('#dialog').innerHTML,/name="status"|name="decisionReason"/);
+  const createForm=new f.MockForm('proposals',{title:'支持导出报表',description:'客户需要离线分析',priority:'P1',proposerName:'客户代表',source:'客户反馈'});
+  createForm.id='proposal-form';createForm.dataset={id:'',projectId:'p-exec',version:'',approve:'0'};
+  let preventedCreate=false;
+  const pendingCreate=f.listeners.submit({target:createForm,preventDefault(){preventedCreate=true;}});
+  assert.equal(preventedCreate,true,'提议新建必须同步阻止浏览器默认提交，避免表单内容进入网址');
+  await pendingCreate;
+  const proposal=f.run('data.proposals.find(p=>p.title==="支持导出报表")');
+  assert.ok(proposal,'真实提交事件必须创建提议并刷新初始化数据');
+  assert.equal(proposal.createdBy,developer);assert.equal(proposal.proposerName,'客户代表');
+  assert.match(f.element('#dialog').innerHTML,/需求提议|支持导出报表/);
+  f.context.proposalId=proposal.id;
+  assert.doesNotMatch(f.element('#dialog').innerHTML,/确认转入需求池/);
+  assert.equal((await f.request(`/api/proposals/${proposal.id}/approve`,{method:'POST',body:{version:proposal.version,acceptance:'导出内容完整'}})).status,403);
+  await f.become(admin.id);await f.run('reload()');f.run('editProposal(proposalId,true)');
+  assert.match(f.element('#dialog').innerHTML,/确认转入需求池/);
+  const form=new f.MockForm('proposals',{title:proposal.title,description:proposal.description,acceptance:'导出内容完整',priority:'P1',source:proposal.source,decisionReason:'评估有明确价值'},proposal.id);
+  form.id='proposal-form';form.dataset={id:proposal.id,projectId:'p-exec',version:String(proposal.version),approve:'1'};
+  let preventedApproval=false;
+  const pendingApproval=f.listeners.submit({target:form,preventDefault(){preventedApproval=true;}});
+  assert.equal(preventedApproval,true,'提议确认必须同步阻止浏览器默认提交');
+  await pendingApproval;
+  const converted=f.run('data.requirements.find(r=>r.title==="支持导出报表")');
+  assert.equal(converted.status,'已确定');assert.equal(converted.deliveryWorkflow,true);
+  assert.equal(converted.originSubmittedBy,developer);assert.equal(converted.originProposalId,proposal.id);
+  const approved=f.app.proposals.read(admin,proposal.id);
+  assert.equal(approved.proposerName,'客户代表','评估表单未重填提出人时仍保留原始来源');
+  assert.equal(approved.createdBy,developer);assert.equal(approved.requirementId,converted.id);
+  assert.match(f.element('#dialog').innerHTML,/需求详情|支持导出报表|需求生命周期/);
+  f.run('route={view:"requirements",projectId:"p-exec"};');
+  const pool=f.run('requirementsView()');assert.match(pool,/支持导出报表/);
+  const legacy=f.run('data.requirements.find(r=>r.projectId==="p-exec"&&["未确定","待评审"].includes(r.status))');
+  if(legacy)assert.ok(!pool.includes(`data-requirement="${legacy.id}"`));
+  f.context.reqId=converted.id;f.run('editRequirement(reqId)');assert.doesNotMatch(f.element('#dialog').innerHTML,/<select[^>]*name="status"/);
+});
+
+test('主开发在任务模块指定主责与排期，无需提交计划即可自动推进需求并保留承诺',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const lead=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  f.app.business.setMember(admin,'p-exec',{userId:lead,role:'lead',version:f.app.business.getProject(admin,'p-exec').version});
+  let req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'任务驱动前端闭环',description:'明确背景',acceptance:'逐项符合标准',planStart:'2026-09-20',planEnd:'2026-10-01'});
+  await f.become(lead);await f.run('reload()');f.context.reqId=req.id;
+  f.run('openRequirementTasks(reqId)');
+  assert.equal(f.run('route.view'),'tasks');assert.equal(f.run('ui.taskLayout'),'group');
+  assert.match(f.element('#view').innerHTML,/任务驱动前端闭环|按需求/);
+  assert.doesNotMatch(f.element('#view').innerHTML,/提交研发计划|启用自动流转/);
+  f.run('editDevelopment(reqId)');assert.match(f.element('#dialog').innerHTML,/主责开发|前置需求/);
+  const settings=new f.MockForm('requirements',{assigneeId:lead},req.id);settings.id='development-form';settings.dataset={id:req.id,version:String(req.version)};
+  let prevented=false;const saved=f.listeners.submit({target:settings,preventDefault(){prevented=true;}});assert.equal(prevented,true);await saved;
+  req=f.app.business.getRequirement({id:lead},req.id);assert.equal(req.assigneeId,lead);
+  f.context.form=new f.MockForm('tasks',{title:'交付工作',description:'完成业务功能',requirementId:req.id,ownerId:lead,status:'wait',estimateHours:'8'});
+  await f.run('saveEntity(form)');
+  let task=f.app.business.listTasks({id:lead},{projectId:'p-exec'}).find(item=>item.requirementId===req.id);
+  req=f.app.business.getRequirement({id:lead},req.id);assert.equal(req.status,'待排期');
+  f.context.form=new f.MockForm('tasks',{title:task.title,description:task.description,requirementId:req.id,ownerId:lead,status:'wait',estimateHours:'8',startDate:'2026-09-28',dueDate:'2026-10-02'},task.id);
+  await f.run('saveEntity(form)');
+  req=f.app.business.getRequirement({id:lead},req.id);assert.equal(req.status,'已排期');
+  assert.equal(req.planStart,'2026-09-20');assert.equal(req.planEnd,'2026-10-01');
+  await f.run('reload()');assert.match(f.run('requirementScheduleSummary(data.requirements.find(req=>req.id===reqId))'),/预计晚于承诺 1 天/);
+  task=f.app.business.getTask({id:lead},task.id);
+  for(const status of ['develop','test','done'])task=f.app.business.updateTask({id:lead},task.id,{version:task.version,status});
+  req=f.app.business.getRequirement({id:lead},req.id);assert.equal(req.status,'测试中');
+  await f.run('reload()');f.element('.dialog-body').dataset.detailId=req.id;await f.run('requirementDetails(reqId)');
+  assert.match(f.element('#dialog').innerHTML,/等待需求验收|确认验收通过/);
+  assert.doesNotMatch(f.element('#dialog').innerHTML,/提交研发计划|启用自动流转/);
+  assert.match(f.element('#requirement-history').innerHTML,/自动流转|触发任务/);
+  const acceptanceForm=new f.MockForm('requirements',{},req.id);acceptanceForm.id='requirement-operation-form';acceptanceForm.dataset={id:req.id,version:String(req.version),operation:'complete'};
+  let preventedAcceptance=false;await f.listeners.submit({target:acceptanceForm,preventDefault(){preventedAcceptance=true;}});
+  assert.equal(preventedAcceptance,true);assert.equal(f.app.business.getRequirement({id:lead},req.id).status,'已完成');
+});
+
+test('按需求任务分组搜索保留空需求，筛选不改变完整进度且观察者不能研发设置',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const req=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'等待拆分的空需求',description:'完整背景',acceptance:'整体通过'});
+  f.app.business.createTask(admin,{projectId:'p-exec',requirementId:req.id,title:'关联工作一',estimateHours:5,ownerId:admin.id});
+  const empty=f.app.business.createRequirement(admin,{projectId:'p-exec',title:'另一个待拆分需求',description:'背景',acceptance:'通过'});
+  await f.run('reload()');f.run('route={view:"tasks",projectId:"p-exec"};ui.taskLayout="group";');
+  assert.ok(f.run('tasksView()').includes(empty.title));
+  f.context.title=req.title;f.run('ui.search=title;');assert.match(f.run('tasksView()'),/关联工作一/);
+  f.run('ui.search="";ui.status="done";');assert.doesNotMatch(f.run('tasksView()'),/另一个待拆分需求/);
+  const viewer=f.run('data.memberships.find(m=>m.projectId==="p-exec"&&m.role==="developer").userId');
+  f.app.business.setMember(admin,'p-exec',{userId:viewer,role:'viewer',version:f.app.business.getProject(admin,'p-exec').version});
+  await f.become(viewer);await f.run('reload()');f.run('ui.status="all";');
+  assert.doesNotMatch(f.run('tasksView()'),/data-manage-development|data-linked-task|data-batch-requirement/);
+  f.context.reqId=req.id;assert.throws(()=>f.run('editDevelopment(reqId)'),/不能调整研发设置/);
+});
+
+test('任务筛选后仍保留隐藏需求组的展开状态',async t=>{
+  const f=await fixture(t);
+  f.run('route={view:"tasks",projectId:"p-exec"};taskGroupStates.set(taskGroupKey(),new Set(["hidden","visible"]));');
+  f.context.document.querySelectorAll=selector=>selector==='details.requirement-task-group'?[
+    {open:false,querySelector:()=>({dataset:{taskGroup:'visible'}})},
+    {open:true,querySelector:()=>({dataset:{taskGroup:'newly-open'}})},
+  ]:[];
+  assert.deepEqual([...f.run('rememberTaskGroups()')].sort(),['hidden','newly-open']);
+});
+
+
+test('提议与需求共用文档选择器，确认转入保留关联并同步文档分类及返回入口',async t=>{
+  const f=await fixture(t),admin=f.run('user');
+  const doc=f.app.business.uploadDocument(admin,'p-exec',{name:'文档联动测试.md',title:'文档联动测试',type:'PRD',contentBuffer:Buffer.from('# 方案\n## 1. 内容〔D-1〕\n具体方案。')}).document;
+  await f.run('reload()');f.run('route={view:"proposals",projectId:"p-exec"};editProposal();');
+  assert.match(f.element('#dialog').innerHTML,/需求标题|关联文档|尚未确认开发/);
+  const mode='documentLinkMode:'+encodeURIComponent('id:'+doc.id),section='documentLinkSections:'+encodeURIComponent('id:'+doc.id)+':D-1';
+  const form=new f.MockForm('proposals',{title:'有完整文档仍待确认',description:'背景完备',acceptance:'整体结果准确',priority:'P1',proposerName:'业务负责人',source:'产品规划',documentLinksPresent:'1',[mode]:'sections',[section]:'D-1'});
+  form.id='proposal-form';form.dataset={id:'',projectId:'p-exec',approve:'0'};
+  await f.listeners.submit({target:form,preventDefault(){}});
+  const proposal=f.run('data.proposals.find(item=>item.title==="有完整文档仍待确认")');
+  assert.equal(proposal.status,'待评估');assert.equal(proposal.docRefs[0].document,doc.name);assert.deepEqual([...proposal.docRefs[0].sections],['D-1']);
+  assert.match(f.element('#dialog').innerHTML,/文档联动测试|data-from-proposal=/);
+  f.context.proposalId=proposal.id;f.context.documentId=doc.id;
+  f.run('route={view:"documents",projectId:"p-exec"};ui.documentConfirmation="unconfirmed";');
+  assert.match(f.run('documentsView()'),/文档联动测试/);
+  f.run('ui.documentConfirmation="confirmed";');assert.ok(!f.run('documentsView()').includes('data-open-document="'+doc.id+'"'));
+  await f.run('openDocument(documentId,{fromProposal:proposalId})');assert.match(f.element('#dialog').innerHTML,/返回提议|data-proposal=/);
+  const approve=new f.MockForm('proposals',{title:proposal.title,description:proposal.description,acceptance:proposal.acceptance,priority:'P1',proposerName:proposal.proposerName,source:proposal.source},proposal.id);
+  approve.id='proposal-form';approve.dataset={id:proposal.id,projectId:'p-exec',version:String(proposal.version),approve:'1'};
+  await f.listeners.submit({target:approve,preventDefault(){}});
+  const converted=f.run('data.requirements.find(item=>item.title==="有完整文档仍待确认")');
+  assert.equal(converted.status,'已确定');assert.equal(JSON.stringify(converted.docRefs),JSON.stringify(proposal.docRefs));
+  assert.equal(f.app.business.listDocuments(admin,'p-exec').filter(item=>item.name===doc.name).length,1);
+  f.run('ui.documentConfirmation="confirmed";');assert.match(f.run('documentsView()'),/文档联动测试/);
+  f.run('ui.documentConfirmation="unconfirmed";');assert.ok(!f.run('documentsView()').includes('data-open-document="'+doc.id+'"'));
+  f.context.reqId=converted.id;f.run('editRequirement(reqId)');assert.match(f.element('#dialog').innerHTML,/关联文档|指定章节|交付承诺与协作/);
+  const reqForm=new f.MockForm('requirements',{title:converted.title,description:converted.description,acceptance:converted.acceptance,priority:'P1',source:converted.source,estimatePoints:'0',documentLinksPresent:'1',[mode]:'none'},converted.id);
+  f.context.form=reqForm;await f.run('saveEntity(form)');
+  const cleared=f.app.business.getRequirement(admin,converted.id);assert.equal(cleared.docRefs.length,0);
+  f.run('ui.documentConfirmation="unlinked";');assert.match(f.run('documentsView()'),/文档联动测试/);
 });

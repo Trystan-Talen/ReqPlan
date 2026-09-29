@@ -4,12 +4,13 @@
    ========================================================================== */
 
 .work-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap-block); align-items: start; }
-.work-list { display: grid; padding: 6px; }
-.work-item { display: flex; align-items: center; gap: var(--space-3); padding: 11px var(--space-3); border-radius: 10px; transition: background .12s; }
+.work-list { display: grid; grid-template-columns: minmax(0, 1fr); padding: 6px; }
+.work-item { display: flex; min-width: 0; align-items: center; gap: var(--space-3); padding: 11px var(--space-3); border-radius: 10px; transition: background .12s; }
 .work-item:hover { background: var(--surface-hover); }
 .work-item > div { flex: 1; min-width: 0; }
-.work-item p { font-size: 12px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item p { font-size: 12px; color: var(--text-3); margin-top: 2px; white-space: normal; overflow-wrap: anywhere; }
 .work-item .item-title { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item [data-open-requirement-tasks] { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .work-item.is-read { opacity: .62; }
 .work-empty { padding: var(--space-7) 18px; text-align: center; color: var(--text-3); font-size: 13px; }
 .notice-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }

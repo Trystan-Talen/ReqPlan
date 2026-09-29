@@ -1,8 +1,9 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { createAttachmentService } from './attachments.mjs';
 import { createDocumentService } from './documents.mjs';
-import { DOCUMENT_TYPES } from '../frontend/doc-sections.js';
-import { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES, OWNER_ROLES, REVIEW_ROLES, LEAD_REQUIREMENT_FIELDS, taskStage, roleCan, checkRequirementTransition, checkTaskTransition, normalizeBaseline, taskGranularity } from '../frontend/workflow.js';
+import { transaction as databaseTransaction } from './database.mjs';
+import { normalizeDocumentLinks } from './document-links.mjs';
+import { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES, OWNER_ROLES, REVIEW_ROLES, REQUIREMENT_REVIEW_ROLES, LEAD_REQUIREMENT_FIELDS, taskStage, roleCan, checkRequirementTransition, checkTaskTransition, normalizeBaseline, taskGranularity, requirementDeliveryState } from '../frontend/workflow.js';
 export { REQUIREMENT_STATUSES, TASK_STATUSES, PROJECT_ROLES } from '../frontend/workflow.js';
 const REQ_FIELDS = ['title', 'description', 'acceptance', 'projectId', 'source', 'status', 'priority', 'ownerId', 'assigneeId', 'collaboratorIds', 'planStart', 'planEnd', 'estimatePoints', 'dependencyIds', 'docRefs', 'acceptanceCases'];
 const TASK_FIELDS = ['title', 'projectId', 'requirementId', 'ownerId', 'status', 'startDate', 'dueDate', 'estimateHours', 'estimatePoints', 'description', 'dependencyIds'];
@@ -53,11 +54,9 @@ export function createBusiness(db) {
   const run = (sql, ...args) => db.prepare(sql).run(...args);
   const get = (sql, ...args) => db.prepare(sql).get(...args);
   const all = (sql, ...args) => db.prepare(sql).all(...args);
-  function transaction(fn) {
-    db.exec('BEGIN IMMEDIATE');
-    try { const result = fn(); db.exec('COMMIT'); return result; }
-    catch (error) { db.exec('ROLLBACK'); throw error; }
-  }
+  // Preserve the immediate write lock at the outer boundary, and use a
+  // savepoint when composing with proposal approval's surrounding transaction.
+  const transaction = operation => databaseTransaction(db, operation);
   function actorUser(actor) {
     const user = actor && get('SELECT id,username,name,role,executive,status,must_change_password FROM users WHERE id=?', id(actor.id));
     if (!user || user.status !== 'active') fail(401, '请登录有效账号', 'UNAUTHENTICATED');
@@ -133,25 +132,8 @@ export function createBusiness(db) {
     result.planStart = date(result.planStart, '需求开始日期'); result.planEnd = date(result.planEnd, '需求截止日期'); dates(result.planStart, result.planEnd);
     result.estimatePoints = number(result.estimatePoints ?? 0, '需求估算点数', 10000);
     validateRequirementDependencies(result);
-    validateDocumentLinks(result);
+    Object.assign(result, normalizeDocumentLinks(result));
     return result;
-  }
-  // 关联文档章节：[{ document: 文件名, type: 文档类型, sections: [章节编号] }]；acceptanceCases 为验收用例编号。
-  // 允许引用尚未上传的文档（界面显示「文档尚未上传」），编号只校验格式。
-  function validateDocumentLinks(result) {
-    const code = (value, label) => { if (typeof value !== 'string' || !/^[§A-Za-z0-9][\w.§-]{0,79}$/u.test(value)) fail(400, `${label}编号格式不正确：${String(value).slice(0, 40)}`); return value; };
-    if (result.docRefs === undefined) result.docRefs = [];
-    if (!Array.isArray(result.docRefs) || result.docRefs.length > 50) fail(400, '关联文档应为最多 50 项的列表');
-    result.docRefs = result.docRefs.map(ref => {
-      if (!ref || typeof ref !== 'object' || Array.isArray(ref)) fail(400, '关联文档格式不正确');
-      const document = text(ref.document, '关联文档名称', 200, true);
-      if (ref.type !== undefined && !DOCUMENT_TYPES.includes(ref.type)) fail(400, '关联文档类型不是允许的选项');
-      if (!Array.isArray(ref.sections || []) || (ref.sections || []).length > 200) fail(400, '关联章节应为最多 200 项的列表');
-      return { document, ...(ref.type ? { type: ref.type } : {}), sections: [...new Set((ref.sections || []).map(value => code(value, '章节')))] };
-    });
-    if (result.acceptanceCases === undefined) result.acceptanceCases = [];
-    if (!Array.isArray(result.acceptanceCases) || result.acceptanceCases.length > 500) fail(400, '验收用例应为最多 500 项的列表');
-    result.acceptanceCases = [...new Set(result.acceptanceCases.map(value => code(value, '验收用例')))];
   }
   function validateRequirementDependencies(result) {
     if (result.dependencyIds === undefined) result.dependencyIds = [];
@@ -180,6 +162,43 @@ export function createBusiness(db) {
     const dependencies = (next.dependencyIds || []).map(dependencyId => rowValue(get('SELECT * FROM requirements WHERE id=? AND project_id=?', dependencyId, next.projectId)));
     const check = checkRequirementTransition(role, previous, next, { tasks, dependencies, reason: text(reason, '操作说明', 1000) });
     if (!check.ok) fail(check.status, check.message, check.code);
+  }
+
+  function deliveryState(requirement, taskOverride) {
+    let tasks = all('SELECT * FROM tasks WHERE requirement_id=?', requirement.id).map(rowValue);
+    if (taskOverride) tasks = [...tasks.filter(task => task.id !== taskOverride.id), taskOverride];
+    const dependencies = (requirement.dependencyIds || []).map(dependencyId => rowValue(get('SELECT * FROM requirements WHERE id=? AND project_id=?', dependencyId, requirement.projectId)));
+    return requirementDeliveryState(requirement, tasks, dependencies);
+  }
+  function syncDelivery(user, requirementId, trigger = {}) {
+    if (!requirementId) return null;
+    const row = record('requirements', requirementId), before = rowValue(row);
+    if (before.archived || ['未确定', '待评审', '已完成', '已终止'].includes(before.status)) return before;
+    const data = { ...JSON.parse(row.data), deliveryWorkflow: true };
+    if (data.workflowHold && trigger.clearHold) data.workflowHold = false;
+    const state = deliveryState(data);
+    data.status = state.status;
+    if (['开发中', '测试中'].includes(data.status) && !data.deliveryStartedAt) data.deliveryStartedAt = now();
+    if (data.status === before.status && before.deliveryWorkflow && Boolean(data.workflowHold) === Boolean(before.workflowHold) && data.deliveryStartedAt === before.deliveryStartedAt) return before;
+    const result = updateRow('requirements', row, data);
+    audit(user, data.status === before.status ? 'update' : 'transition', 'requirement', row.id, row.project_id, { before, after: data, automatic: true, reason: trigger.reason || '根据研发计划和关联任务自动同步', ...trigger });
+    return result;
+  }
+  function assertTaskParentOpen(requirementId) {
+    if (!requirementId) return;
+    const row = record('requirements', requirementId), requirement = JSON.parse(row.data);
+    if (['已完成', '已终止'].includes(requirement.status)) fail(409, '需求已经结束，请先重新打开需求再调整交付任务', 'STATE_TRANSITION');
+  }
+  function assertTaskStart(data, before = {}) {
+    if (!data.requirementId || !['develop', 'test', 'done'].includes(taskStage(data.status))) return;
+    if (data.requirementId === before.requirementId && taskStage(data.status) === taskStage(before.status)) return;
+    const parent = rowValue(record('requirements', data.requirementId));
+    const current = deliveryState(parent), next = deliveryState(parent, data);
+    const firstStartGates = [...next.planGates, ...(next.scheduleReady ? [] : ['请为所有有效任务填写完整的计划起止日期'])];
+    if (!current.hasStarted && firstStartGates.length) fail(409, firstStartGates.join('；'), 'TRANSITION_GATE');
+    // Historical tasks already under way may finish testing even when old dates
+    // are incomplete. Starting/reopening development still respects dependencies.
+    if (taskStage(data.status) === 'develop' && next.pendingDependencies.length) fail(409, '前置需求尚未完成', 'DEPENDENCY_GATE');
   }
 
   function validateTask(input, previous = {}) {
@@ -214,6 +233,7 @@ export function createBusiness(db) {
       const parent = record('requirements', result.requirementId); const requirement = JSON.parse(parent.data);
       if (parent.project_id !== result.projectId) fail(400, '任务与关联需求必须属于同一项目');
       if (parent.archived) fail(409, '关联需求已归档，请先恢复', 'ARCHIVED');
+      if (['未确定', '待评审'].includes(requirement.status) && (!previous.id || result.requirementId !== previous.requirementId || taskStage(result.status) !== taskStage(previous.status))) fail(409, '关联需求尚未确认，请先在需求提议模块评估通过后再安排研发任务', 'PROPOSAL_WORKFLOW_REQUIRED');
       if (['已完成', '已终止'].includes(requirement.status) && !['done', 'terminated'].includes(taskStage(result.status))) fail(409, '关联需求已经结束，请先重新打开需求', 'STATE_TRANSITION');
     }
     return result;
@@ -275,15 +295,98 @@ export function createBusiness(db) {
       audit(access.user, archived ? 'archive' : 'restore', 'project', projectId, projectId); return result;
     });
   }
-  function createRequirement(actor, input) {
+  function insertConfirmedRequirement(actor, input, origin = { originType: 'direct' }) {
     inputRecord(input, REQ_FIELDS);
     return transaction(() => { const access = permission(actor, id(input.projectId), ['product']);
       if (input.assigneeId && access.role !== 'admin') fail(403, '主责开发由主开发在拆分任务时指定', 'FORBIDDEN');
-      const data = validateRequirement({ ownerId: access.user.id, ...input });
-      if (data.status !== '未确定') fail(400, '新需求从未确定阶段开始，请先录入再提交评审', 'TRANSITION_GATE');
+      if (input.status && input.status !== '已确定') fail(400, '需求池只接收已确认开发的需求，待评估内容请先提交需求提议', 'TRANSITION_GATE');
+      const data = validateRequirement({ ownerId: access.user.id, ...input, status: '已确定' });
+      if (!data.description || !data.acceptance) fail(400, '已确认需求必须填写背景与目标及验收标准', 'TRANSITION_GATE');
+      Object.assign(data, origin, { deliveryWorkflow: true, planSubmitted: false, workflowHold: false });
       const stamp = now(); data.id = uid('r'); data.createdAt = stamp; data.baseline = data.planStart || data.planEnd ? { planStart: data.planStart, planEnd: data.planEnd, capturedAt: stamp } : null; data.rescheduleCount = 0;
       run('INSERT INTO requirements(id,project_id,data,version,archived,created_at,updated_at) VALUES(?,?,?,1,0,?,?)', data.id, data.projectId, JSON.stringify(data), stamp, stamp);
       audit(access.user, 'create', 'requirement', data.id, data.projectId, { after: data }); return rowValue(record('requirements', data.id));
+    });
+  }
+  function createRequirement(actor, input) { return insertConfirmedRequirement(actor, input); }
+  // Only the internal proposal service calls this method; request payloads cannot
+  // spoof origin fields because the public create endpoint accepts REQ_FIELDS.
+  function createRequirementFromProposal(actor, input, { proposalId, submittedBy } = {}) {
+    return insertConfirmedRequirement(actor, input, { originType: 'proposal', originProposalId: id(proposalId), originSubmittedBy: id(submittedBy) });
+  }
+  function confirmLegacyRequirement(actor, requirementId, input) {
+    inputRecord(input, [...REQ_FIELDS, 'version', 'originProposalId', 'originSubmittedBy']);
+    return transaction(() => {
+      const row = record('requirements', requirementId), access = permission(actor, row.project_id, ['product']);
+      expectedVersion(row, input.version);
+      if (row.archived) fail(409, '需求已归档，请先恢复', 'ARCHIVED');
+      const before = JSON.parse(row.data);
+      if (!['未确定', '待评审'].includes(before.status)) fail(409, '该需求已经确认，无需重复转入需求池', 'STATE_TRANSITION');
+      if (input.projectId && input.projectId !== row.project_id) fail(400, '需求不能直接跨项目移动');
+      if (input.assigneeId && input.assigneeId !== before.assigneeId && access.role !== 'admin') fail(403, '主责开发由主开发指定', 'FORBIDDEN');
+      const data = validateRequirement({ ...input, status: '已确定' }, before);
+      if (!data.description || !data.acceptance) fail(400, '确认需求前必须填写背景与目标及验收标准', 'TRANSITION_GATE');
+      Object.assign(data, { deliveryWorkflow: true, planSubmitted: false, workflowHold: false, originType: 'proposal', originProposalId: id(input.originProposalId || `legacy-${row.id}`), originSubmittedBy: id(input.originSubmittedBy || before.ownerId) });
+      const result = updateRow('requirements', row, data);
+      audit(access.user, 'transition', 'requirement', row.id, row.project_id, { before, after: data, reason: '需求提议评估通过，保留原编号及任务、文档关联' });
+      return result;
+    });
+  }
+  function submitRequirementPlan(actor, requirementId, input) {
+    inputRecord(input, ['version']);
+    return transaction(() => {
+      const row = record('requirements', requirementId), access = permission(actor, row.project_id, ['lead']);
+      expectedVersion(row, input.version);
+      if (row.archived) fail(409, '需求已归档，请先恢复', 'ARCHIVED');
+      const before = JSON.parse(row.data);
+      if (['未确定', '待评审', '已完成', '已终止'].includes(before.status)) fail(409, '只有已确认且未结束的需求可以提交研发计划', 'STATE_TRANSITION');
+      const data = { ...before, deliveryWorkflow: true, planSubmitted: true, planSubmittedAt: now(), planSubmittedBy: access.user.id };
+      const state = deliveryState(data);
+      if (!state.planReady) fail(409, state.planGates.join('；'), 'TRANSITION_GATE');
+      data.status = state.status;
+      if (['开发中', '测试中'].includes(data.status) && !data.deliveryStartedAt) data.deliveryStartedAt = now();
+      const result = updateRow('requirements', row, data);
+      audit(access.user, 'submit_plan', 'requirement', row.id, row.project_id, { before, after: data, reason: '兼容旧版计划入口；研发阶段已改为按任务自动同步' });
+      return result;
+    });
+  }
+  function returnRequirement(actor, requirementId, input) {
+    inputRecord(input, ['version', 'reason', 'taskIds']);
+    const reason = text(input.reason, '退回原因', 1000, true);
+    if (!Array.isArray(input.taskIds) || !input.taskIds.length || input.taskIds.length > 100) fail(400, '请选择至少一个需要返工的任务');
+    const taskIds = [...new Set(input.taskIds.map(value => id(value)))];
+    return transaction(() => {
+      const row = record('requirements', requirementId), access = permission(actor, row.project_id, REQUIREMENT_REVIEW_ROLES);
+      expectedVersion(row, input.version);
+      const before = JSON.parse(row.data);
+      if (row.archived) fail(409, '需求已归档，请先恢复', 'ARCHIVED');
+      if (deliveryState(before).status !== '测试中') fail(409, '只有测试中的需求可以退回整改', 'STATE_TRANSITION');
+      const rows = taskIds.map(taskId => { const task = get('SELECT * FROM tasks WHERE id=? AND requirement_id=?', taskId, row.id), data = task ? JSON.parse(task.data) : null; if (!task || task.archived || !['test', 'done'].includes(taskStage(data.status))) fail(400, '返工任务必须是本需求测试中或已完成的有效任务'); return task; });
+      for (const task of rows) {
+        const previous = JSON.parse(task.data), data = { ...previous, status: 'develop', completedAt: '' };
+        updateRow('tasks', task, data); audit(access.user, 'transition', 'task', task.id, row.project_id, { before: previous, after: data, reason, requirementReview: row.id });
+      }
+      const data = { ...before, status: '开发中', deliveryWorkflow: true, workflowHold: false, deliveryStartedAt: before.deliveryStartedAt || now() };
+      const result = updateRow('requirements', row, data);
+      audit(access.user, 'transition', 'requirement', row.id, row.project_id, { before, after: data, reason, taskIds, manualReview: true });
+      return result;
+    });
+  }
+  function reopenRequirement(actor, requirementId, input) {
+    inputRecord(input, ['version', 'reason']);
+    const reason = text(input.reason, '重新打开原因', 1000, true);
+    return transaction(() => {
+      const row = record('requirements', requirementId), before = JSON.parse(row.data);
+      const access = permission(actor, row.project_id, before.status === '已终止' ? ['product', 'lead'] : REQUIREMENT_REVIEW_ROLES);
+      expectedVersion(row, input.version);
+      if (row.archived) fail(409, '需求已归档，请先恢复', 'ARCHIVED');
+      if (!['已完成', '已终止'].includes(before.status)) fail(409, '只有已经结束的需求可以重新打开', 'STATE_TRANSITION');
+      const data = before.status === '已终止'
+        ? { ...before, status: '已确定', deliveryWorkflow: true, planSubmitted: false, workflowHold: false, deliveryStartedAt: '' }
+        : { ...before, status: '开发中', deliveryWorkflow: true, planSubmitted: true, workflowHold: true, deliveryStartedAt: before.deliveryStartedAt || now() };
+      const result = updateRow('requirements', row, data);
+      audit(access.user, 'transition', 'requirement', row.id, row.project_id, { before, after: data, reason, manualReview: true });
+      return result;
     });
   }
   function updateRequirement(actor, requirementId, input) {
@@ -291,14 +394,21 @@ export function createBusiness(db) {
     return transaction(() => { const row = record('requirements', requirementId); const access = entityPermission(actor, row, 'requirement', true); expectedVersion(row, input.version);
       if (input.projectId && input.projectId !== row.project_id) fail(400, '需求不能直接跨项目移动');
       const before = JSON.parse(row.data); const data = validateRequirement(input, before);
+      if (['未确定', '待评审'].includes(before.status)) fail(409, '待评估内容请在需求提议模块编辑并评估，评估通过后转入需求池', 'PROPOSAL_WORKFLOW_REQUIRED');
       if (access.role === 'product') restrictFields(input, before, data, [...REQ_FIELDS.filter(key => key !== 'assigneeId'), 'version', 'reason', 'force'], '主责开发由主开发指定');
       if (access.role === 'lead') restrictFields(input, before, data, [...LEAD_REQUIREMENT_FIELDS, 'version'], '需求内容由产品经理维护；主开发可调整主责开发、协作人、排期和依赖');
       if (['developer', 'tester'].includes(access.role)) restrictFields(input, before, data, ['version', 'status', 'reason'], '开发和测试角色只能流转需求状态');
-      requirementTransition(access.role, before, data, input.reason);
+      if (before.status !== data.status && (['未确定', '待评审'].includes(before.status) || ['未确定', '待评审'].includes(data.status))) fail(409, '需求评估请在需求提议模块完成，评估通过后转入需求池', 'PROPOSAL_WORKFLOW_REQUIRED');
+      if (before.status !== data.status && (data.status === '开发中' || ['已完成', '已终止'].includes(before.status) && data.status !== '已终止')) fail(409, '请使用退回整改或重新打开操作，并记录原因及返工任务', 'WORKFLOW_ACTION_REQUIRED');
+      if ((before.description && !data.description) || (before.acceptance && !data.acceptance)) fail(400, '已确认需求必须保留背景与目标及验收标准', 'TRANSITION_GATE');
+      const effectiveBefore = before.status === data.status ? before : { ...before, status: deliveryState({ ...before, deliveryWorkflow: true }).status };
+      requirementTransition(access.role, effectiveBefore, data, input.reason);
       const planChanged = data.planStart !== (before.planStart || '') || data.planEnd !== (before.planEnd || '');
       if (planChanged && data.planEnd && access.project.targetDate && data.planEnd > access.project.targetDate && input.force !== true) fail(409, '新排期超出项目目标，请确认后重新提交', 'SCHEDULE_CONFIRMATION_REQUIRED');
       if (planChanged) preserveBaseline(before, data);
-      const result = updateRow('requirements', row, data); audit(access.user, before.status === data.status ? 'update' : 'transition', 'requirement', data.id, data.projectId, { before, after: data, reason: text(input.reason, '操作说明', 1000) }); return result;
+      data.deliveryWorkflow = true;
+      updateRow('requirements', row, data); audit(access.user, before.status === data.status ? 'update' : 'transition', 'requirement', data.id, data.projectId, { before, after: data, reason: text(input.reason, '操作说明', 1000) });
+      return syncDelivery(access.user, data.id, { reason: '需求研发计划信息变更后自动同步' });
     });
   }
   function preserveBaseline(before, data) {
@@ -323,6 +433,7 @@ export function createBusiness(db) {
         if (row.archived) fail(409, '需求已归档，请先恢复', 'ARCHIVED');
         expectedVersion(row, entry.version);
         const value = JSON.parse(row.data), before = { planStart: value.planStart || '', planEnd: value.planEnd || '' };
+        if (['未确定', '待评审'].includes(value.status)) fail(409, '待评估内容必须先在需求提议模块确认，再安排研发计划', 'PROPOSAL_WORKFLOW_REQUIRED');
         const after = { planStart: own(entry, 'planStart') ? date(entry.planStart, '需求开始日期') : before.planStart, planEnd: own(entry, 'planEnd') ? date(entry.planEnd, '需求截止日期') : before.planEnd };
         dates(after.planStart, after.planEnd);
         const changed = after.planStart !== before.planStart || after.planEnd !== before.planEnd;
@@ -365,8 +476,9 @@ export function createBusiness(db) {
         if (!change.changed) { requirements.push(rowValue(row)); continue; }
         const before = JSON.parse(row.data), data = { ...before, ...change.after };
         preserveBaseline(before, data);
-        requirements.push(updateRow('requirements', row, data));
+        updateRow('requirements', row, data);
         audit(access.user, 'reschedule', 'requirement', row.id, row.project_id, { before, after: data, reason, batch: true });
+        requirements.push(syncDelivery(access.user, row.id, { reason: '需求排期变更后自动同步', batch: true }));
       }
       return { requirements, changedCount: preview.changes.filter(change => change.changed).length };
     });
@@ -376,11 +488,14 @@ export function createBusiness(db) {
     return transaction(() => { const access = permission(actor, id(input.projectId), ['lead', 'developer']);
       const data = validateTask({ ownerId: access.user.id, ...input });
       if (!data.requirementId) fail(400, '任务必须关联需求');
+      assertTaskParentOpen(data.requirementId);
       assertTaskAuthority(access, data.requirementId, [data]);
       if (taskStage(data.status) !== 'wait') fail(400, '新任务从待开始阶段创建', 'TRANSITION_GATE');
       const stamp = now(); data.id = uid('t'); data.createdAt = stamp; data.createdBy = access.user.id; data.completedAt = '';
       run('INSERT INTO tasks(id,project_id,requirement_id,data,version,archived,created_at,updated_at) VALUES(?,?,?,?,1,0,?,?)', data.id, data.projectId, data.requirementId || null, JSON.stringify(data), stamp, stamp);
-      audit(access.user, 'create', 'task', data.id, data.projectId, { after: data }); return rowValue(record('tasks', data.id));
+      audit(access.user, 'create', 'task', data.id, data.projectId, { after: data });
+      syncDelivery(access.user, data.requirementId, { triggerTaskId: data.id, reason: '新增交付任务后自动同步', clearHold: true });
+      return rowValue(record('tasks', data.id));
     });
   }
   // Lead developers assign anyone; developers add tasks for themselves under requirements they take part in.
@@ -410,6 +525,7 @@ export function createBusiness(db) {
         return { ...saved.result, replayed: true };
       }
       expectedVersion(row, input.version);
+      assertTaskParentOpen(row.id);
       const errors = [], warnings = [], validated = [];
       input.tasks.forEach((entry, index) => {
         try {
@@ -440,8 +556,9 @@ export function createBusiness(db) {
         audit(access.user, 'create', 'task', data.id, row.project_id, { requirementId: row.id, batchRequestId: requestId, after: data });
         return rowValue(record('tasks', data.id));
       });
-      const requirement = updateRow('requirements', row, JSON.parse(row.data));
+      updateRow('requirements', row, JSON.parse(row.data));
       audit(access.user, 'split_tasks', 'requirement', row.id, row.project_id, { taskIds: tasks.map(task => task.id), count: tasks.length, requestId });
+      const requirement = syncDelivery(access.user, row.id, { triggerTaskIds: tasks.map(task => task.id), reason: '批量拆分任务后自动同步', clearHold: true });
       const result = { requirement, tasks, warnings, replayed: false };
       run('INSERT INTO app_meta(key,value) VALUES(?,?)', key, JSON.stringify({ digest, result }));
       return result;
@@ -455,18 +572,26 @@ export function createBusiness(db) {
       if (access.role === 'developer' && before.ownerId === access.user.id) restrictFields(input, before, data, TASK_FIELDS.filter(key => !['ownerId', 'requirementId', 'projectId'].includes(key)).concat(['version', 'reason']), '任务转派和关联变更需要主开发');
       else if (['developer', 'product', 'tester'].includes(access.role)) restrictFields(input, before, data, ['version', 'status', 'reason'], '只能验收或退回他人的任务');
       if (before.requirementId && !data.requirementId) fail(400, '任务必须关联需求');
+      const deliveryFields = TASK_FIELDS.filter(key => !['title', 'description', 'projectId'].includes(key));
+      if (deliveryFields.some(key => JSON.stringify(before[key]) !== JSON.stringify(data[key]))) {
+        assertTaskParentOpen(before.requirementId); assertTaskParentOpen(data.requirementId);
+      }
       const dependencies = data.dependencyIds.map(dependencyId => rowValue(get('SELECT * FROM tasks WHERE id=? AND project_id=?', dependencyId, data.projectId)));
       const transition = checkTaskTransition(access.role, before.status, data.status, { reason: text(input.reason, '操作说明', 1000), dependencies, ownTask: before.ownerId === access.user.id });
       if (!transition.ok) fail(transition.status, transition.message, transition.code);
+      assertTaskStart(data, before);
       data.completedAt = taskStage(data.status) === 'done' ? (taskStage(before.status) === 'done' ? before.completedAt || '' : now()) : '';
       const result = updateRow('tasks', row, data); run('UPDATE tasks SET requirement_id=? WHERE id=?', data.requirementId || null, taskId);
-      audit(access.user, before.status === data.status ? 'update' : 'transition', 'task', taskId, data.projectId, { before, after: data, reason: text(input.reason, '操作说明', 1000) }); return result;
+      audit(access.user, before.status === data.status ? 'update' : 'transition', 'task', taskId, data.projectId, { before, after: data, reason: text(input.reason, '操作说明', 1000) });
+      for (const requirementId of new Set([before.requirementId, data.requirementId])) syncDelivery(access.user, requirementId, { triggerTaskId: taskId, taskBeforeStatus: before.status, taskAfterStatus: data.status, reason: before.requirementId !== data.requirementId ? '任务关联需求变更后自动同步' : '任务状态或计划变更后自动同步', clearHold: before.status !== data.status && ['wait', 'develop'].includes(taskStage(data.status)) });
+      return result;
     });
   }
   function archiveEntity(actor, entityId, input, type) {
     inputRecord(input, ['version', 'archived']); if (own(input, 'archived') && typeof input.archived !== 'boolean') fail(400, '归档标记必须是布尔值');
     return transaction(() => { const table = type === 'requirement' ? 'requirements' : 'tasks'; const row = record(table, entityId); const access = permission(actor, row.project_id, type === 'requirement' ? ['product'] : []); expectedVersion(row, input.version);
       const archived = input.archived !== false; const data = JSON.parse(row.data);
+      if (type === 'task' && Boolean(row.archived) !== archived) assertTaskParentOpen(data.requirementId);
       if (type === 'task' && archived && !row.archived) {
         const dependents = all('SELECT id,data FROM tasks WHERE project_id=? AND archived=0 AND id<>?', row.project_id, entityId)
           .filter(task => (JSON.parse(task.data).dependencyIds || []).includes(entityId));
@@ -476,7 +601,10 @@ export function createBusiness(db) {
       if (type === 'requirement' && !archived) validateRequirementDependencies({ ...data });
       const result = updateRow(table, row, data, archived); let cascaded = 0;
       if (type === 'requirement' && archived) for (const task of all('SELECT * FROM tasks WHERE requirement_id=? AND archived=0', entityId)) { updateRow('tasks', task, JSON.parse(task.data), true); audit(access.user, 'archive', 'task', task.id, row.project_id, { reason: '关联需求归档' }); cascaded += 1; }
-      audit(access.user, archived ? 'archive' : 'restore', type, entityId, row.project_id, { cascaded }); return { ...result, cascaded };
+      audit(access.user, archived ? 'archive' : 'restore', type, entityId, row.project_id, { cascaded });
+      if (type === 'task') syncDelivery(access.user, data.requirementId, { triggerTaskId: entityId, reason: archived ? '任务删除或归档后重新检查交付范围' : '恢复交付任务后自动同步', clearHold: !archived && ['wait', 'develop'].includes(taskStage(data.status)) });
+      const requirement = type === 'requirement' && !archived ? syncDelivery(access.user, entityId, { reason: '需求恢复后重新检查交付范围' }) : result;
+      return { ...requirement, cascaded };
     });
   }
   function listMembers(actor, projectId) {
@@ -566,7 +694,7 @@ export function createBusiness(db) {
     return { currentUser: publicUser(user), projects, requirements, tasks, users, memberships, documents: documents.listForProjects(projectIds), requirementStatuses: REQUIREMENT_STATUSES, taskStatuses: TASK_STATUSES, projectRoles: PROJECT_ROLES };
   }
   return Object.freeze({ bootstrap, listProjects, getProject: (actor, projectId) => permission(actor, projectId).project, createProject, updateProject, archiveProject,
-    listRequirements: (actor, options = {}) => listEntities(actor, 'requirements', options), getRequirement: (actor, requirementId) => { const row = record('requirements', requirementId); return entityPermission(actor, row, 'requirement').value; }, createRequirement, updateRequirement, archiveRequirement: (actor, requirementId, input) => archiveEntity(actor, requirementId, input, 'requirement'),
+    listRequirements: (actor, options = {}) => listEntities(actor, 'requirements', options), getRequirement: (actor, requirementId) => { const row = record('requirements', requirementId); return entityPermission(actor, row, 'requirement').value; }, createRequirement, createRequirementFromProposal, confirmLegacyRequirement, submitRequirementPlan, returnRequirement, reopenRequirement, updateRequirement, archiveRequirement: (actor, requirementId, input) => archiveEntity(actor, requirementId, input, 'requirement'),
     listTasks: (actor, options = {}) => listEntities(actor, 'tasks', options), getTask: (actor, taskId) => { const row = record('tasks', taskId); return entityPermission(actor, row, 'task').value; }, createTask, createTaskBatch, updateTask, archiveTask: (actor, taskId, input) => archiveEntity(actor, taskId, input, 'task'),
     previewSchedule, applySchedule, listMembers, setMember, removeMember, listHistory, listAttachments, uploadAttachment, getAttachment, listAttachmentVersions,
     listDocuments: documents.listDocuments, listDocumentVersions: documents.listVersions, getDocumentContent: documents.getContent, uploadDocument: documents.uploadDocument, updateDocument: documents.updateDocument });

@@ -279,6 +279,7 @@ a.item-title:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Key-value grid */
 .detail-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1px; border-radius: var(--radius); overflow: hidden; background: var(--border); border: 1px solid var(--border); }
+.detail-kv.detail-kv-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detail-kv > div { background: var(--surface); padding: 11px 14px; min-width: 0; }
 .detail-kv dt { font-size: var(--text-xs); color: var(--text-3); margin-bottom: 3px; }
 .detail-kv dd { font-size: 13px; font-weight: 560; font-variant-numeric: tabular-nums; word-break: break-word; }
@@ -392,6 +393,7 @@ dialog#dialog.is-center[open], dialog#dialog.is-wide[open] { animation: pop-in .
   .form-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 560px) {
+  .detail-kv.detail-kv-two { grid-template-columns: minmax(0, 1fr); }
   .metric-value { font-size: 26px; }
   .dialog-body { padding: 18px 18px var(--space-6); }
   .detail-hero { margin: -18px -18px 18px; padding: 18px; }

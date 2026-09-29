@@ -14,12 +14,13 @@ function fixture(t){
   db.prepare('INSERT INTO projects(id,data) VALUES(?,?)').run('p-real','{"name":"真实项目"}');
   db.prepare('INSERT INTO requirements(id,project_id,data) VALUES(?,?,?)').run('r-real','p-real','{"title":"真实需求"}');
   db.prepare('INSERT INTO tasks(id,project_id,requirement_id,data) VALUES(?,?,?,?)').run('t-real','p-real','r-real','{"title":"真实任务"}');
+  db.prepare('INSERT INTO proposals(id,project_id,requirement_id,data) VALUES(?,?,?,?)').run('q-real','p-real','r-real','{"status":"已转需求"}');
   db.close();return{dir,source,snapshot,target:path.join(dir,'server','data','xinghe.sqlite')};
 }
 test('快照导入全新位置后保留原编号与数量，可被服务正常打开',async t=>{
   const f=fixture(t);await backupDatabase(f.source,f.snapshot);
   const result=await importSnapshot(f.snapshot,f.target,{temporaryRoot:f.dir});
-  assert.equal(result.counts.projects,1);assert.equal(result.counts.requirements,1);assert.equal(result.counts.tasks,1);
+  assert.equal(result.counts.projects,1);assert.equal(result.counts.requirements,1);assert.equal(result.counts.tasks,1);assert.equal(result.counts.proposals,1);
   const db=openDatabase(f.target);
   try{assert.equal(db.prepare('SELECT id FROM tasks').get().id,'t-real');}finally{db.close();}
   assert.equal(fs.statSync(f.target).mode&0o777,0o600);
