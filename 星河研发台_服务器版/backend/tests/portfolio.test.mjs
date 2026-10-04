@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requirementProgress, requirementHealth, requirementWindow, projectSummary, packLanes, maxParallelProjects, portfolioTimelineContext, renderPortfolio } from '../../frontend/portfolio.js';
+import { requirementProgress, requirementHealth, requirementWindow, projectSummary, healthBadge, packLanes, maxParallelProjects, portfolioTimelineContext, renderPortfolio } from '../../frontend/portfolio.js';
 import { createTimelineState } from '../../frontend/timeline.js';
 
 const today = '2026-10-10';
@@ -15,13 +15,16 @@ test('需求进度按未终止任务工时计算，没有工时时按个数', ()
   assert.equal(requirementProgress(req({ status: '已完成' }), []), 1);
 });
 
-test('已延期：超过计划结束日或计划晚于基线，延期天数取较大者', () => {
+test('实际逾期按当前承诺截止日计算，历史基线不参与健康度', () => {
   const overdue = requirementHealth(req({ planEnd: '2026-10-07' }), { tasks: [], today });
   assert.equal(overdue.state, 'late'); assert.equal(overdue.lateDays, 3);
-  const slipped = requirementHealth(req({ planEnd: '2026-10-30', baseline: { planStart: '2026-10-01', planEnd: '2026-10-20' } }), { tasks: [], today });
-  assert.equal(slipped.state, 'late'); assert.equal(slipped.lateDays, 10);
+  const slipped = requirementHealth(req({ planEnd: '2026-10-30', baseline: { planStart: '2026-10-01', planEnd: '2026-10-20' } }), { tasks: [task({status:'wait',startDate:'2026-10-12',dueDate:'2026-10-25'})], today });
+  assert.equal(slipped.state, 'normal'); assert.equal(slipped.lateDays, 0);
+  assert.deepEqual(slipped,requirementHealth(req({planEnd:'2026-10-30'}),{tasks:[task({status:'wait',startDate:'2026-10-12',dueDate:'2026-10-25'})],today}));
+  assert.deepEqual(slipped.reasons,[]);
   const both = requirementHealth(req({ planEnd: '2026-10-08', baseline: { planStart: '2026-10-01', planEnd: '2026-10-03' } }), { tasks: [], today });
-  assert.equal(both.lateDays, 5);
+  assert.equal(both.lateDays, 2);
+  assert.deepEqual(both,requirementHealth(req({planEnd:'2026-10-08'}),{tasks:[],today}));
   assert.equal(requirementHealth(req({ status: '已完成', planEnd: '2026-10-01' }), { tasks: [], today }).state, 'done');
   assert.equal(requirementHealth(req({ status: '已终止', planEnd: '2026-10-01' }), { tasks: [], today }).state, 'terminated');
 });
@@ -38,12 +41,12 @@ test('有风险：已过时间比进度高 20 个百分点以上，或前置需�
   assert.equal(requirementHealth(req({ planStart: '', planEnd: '' }), { tasks: [], today }).state, 'unscheduled');
 });
 
-test('项目取最差需求状态；最晚需求晚于目标日期也算延期；统计逾期任务与积压', () => {
+test('项目汇总实际逾期及未来风险，统计逾期任务与积压', () => {
   const project = { id: 'p1', name: '项目', targetDate: '2026-10-25', milestones: [{ label: '已过', date: '2026-10-01' }, { label: 'N1', date: '2026-10-16' }] };
   const requirements = [req({ id: 'r1' }), req({ id: 'r2', planEnd: '2026-10-28' }), req({ id: 'r3', status: '已确定', planStart: '', planEnd: '' }), req({ id: 'r4', status: '待评审', planStart: '', planEnd: '' }), req({ id: 'r5', status: '已终止' })];
   const tasks = [task({ requirementId: 'r1', status: 'done', estimateHours: 6 }), task({ id: 't2', requirementId: 'r1', estimateHours: 2, dueDate: '2026-10-08' }), task({ id: 't3', requirementId: 'r2', estimateHours: 8, dueDate: '2026-10-28' })];
   const summary = projectSummary(project, { requirements, tasks, today });
-  assert.equal(summary.state, 'late'); assert.equal(summary.lateDays, 3);
+  assert.equal(summary.state, 'late'); assert.equal(summary.lateDays, 2); assert.equal(summary.forecastDelayDays,3);
   assert.equal(summary.start, '2026-10-01'); assert.equal(summary.end, '2026-10-28');
   assert.equal(summary.progress, 6 / 16);
   assert.equal(summary.total, 4); assert.deepEqual(summary.counts, { review: 1, plan: 1, progress: 2, test: 0, done: 0 });
@@ -81,7 +84,7 @@ test('全局甘特范围覆盖所有可见项目周期、需求与任务；页�
   assert.match(issues, /没有符合条件的项目/);
 });
 
-test('研发窗口从有效任务汇总，承诺与基线独立保留，未排期不能用承诺冒充',()=>{
+test('研发窗口从有效任务汇总，当前承诺独立保留，未排期不能用承诺冒充',()=>{
   const requirement=req({deliveryWorkflow:true,status:'待排期',planStart:'2026-09-01',planEnd:'2026-11-01'});
   const tasks=[task({startDate:'2026-10-03',dueDate:'2026-10-14'}),task({id:'t2',startDate:'2026-10-06',dueDate:'2026-10-18'}),task({id:'off',status:'terminated',startDate:'2026-01-01',dueDate:'2027-01-01'}),task({id:'archived',archived:true,startDate:'2025-01-01',dueDate:'2028-01-01'})];
   assert.deepEqual(requirementWindow(requirement,tasks),{start:'2026-10-03',end:'2026-10-18',source:'tasks',complete:true,unscheduled:0,taskCount:2});
@@ -102,16 +105,83 @@ test('承诺逾期、任务预计超承诺和研发逾期给出不同风险原�
   const commitment=requirementHealth({...requirement,planEnd:'2026-10-08'},{tasks:[task({status:'done',dueDate:'2026-10-07'})],today});
   assert.equal(commitment.state,'late');assert.equal(commitment.commitmentOverdueDays,2);assert.equal(commitment.executionOverdueDays,0);assert.match(commitment.reasons[0],/承诺截止已逾期 2 天/);
   const execution=requirementHealth(requirement,{tasks:[task({dueDate:'2026-10-09'})],today});
-  assert.equal(execution.state,'late');assert.equal(execution.commitmentOverdueDays,0);assert.equal(execution.executionOverdueDays,1);assert.match(execution.reasons[0],/研发任务区间已逾期 1 天/);
+  assert.equal(execution.state,'late');assert.equal(execution.commitmentOverdueDays,0);assert.equal(execution.executionOverdueDays,1);assert.match(execution.reasons[0],/未完成任务已逾期，最长 1 天/);
 });
 
-test('甘特主条显示研发日期，承诺与基线可追溯，旧承诺备用明确标注',()=>{
+test('甘特主条显示研发和当前承诺日期，隐藏历史基线，旧承诺备用明确标注',()=>{
   const projects=[{id:'p1',name:'项目',targetDate:'2026-11-01'}];
   const requirements=[req({deliveryWorkflow:true,planStart:'2026-09-20',planEnd:'2026-10-25',baseline:{planStart:'2026-09-18',planEnd:'2026-10-22'}})];
   const args={projects,requirements,tasks:[task({startDate:'2026-10-02',dueDate:'2026-10-18'})],users:[],today,state:{...createTimelineState(today),fit:true},filters:{view:'project',project:'all',owner:'all',issues:false},expanded:new Set(['p:p1']),viewportWidth:900};
   const html=renderPortfolio(args);
-  assert.match(html,/研发周期 2026-10-02 — 2026-10-18/);assert.match(html,/承诺区间 2026-09-20 — 2026-10-25/);assert.match(html,/承诺基线 2026-09-18 — 2026-10-22/);
-  const context=portfolioTimelineContext(args);assert(context.tasks.some(item=>item.startDate==='2026-09-18'&&item.dueDate==='2026-10-22'));
+  assert.match(html,/研发周期 2026-10-02 — 2026-10-18/);assert.match(html,/承诺区间 2026-09-20 — 2026-10-25/);assert.doesNotMatch(html,/基线|portfolio-baseline/);
+  const withoutBaseline={...args,requirements:requirements.map(({baseline,...current})=>current)};
+  const context=portfolioTimelineContext(args);assert.deepEqual(context,portfolioTimelineContext(withoutBaseline));
+  for(const view of ['project','person']) {
+    const filters={...args.filters,view};
+    const current=renderPortfolio({...withoutBaseline,filters});
+    for(const baseline of [{planStart:'2000-01-01',planEnd:'2000-01-08'},{planStart:'2099-01-01',planEnd:'2099-01-08'}]) {
+      const historical={...args,filters,requirements:[{...requirements[0],baseline}]};
+      assert.deepEqual(portfolioTimelineContext(historical),context);
+      assert.equal(renderPortfolio(historical),current,'历史基线不得影响任何视图的时间范围、文案或提示');
+    }
+  }
+  assert.deepEqual(requirements[0].baseline,{planStart:'2026-09-18',planEnd:'2026-10-22'},'历史数据仍原样保留');
   const legacy=renderPortfolio({...args,requirements:[{...requirements[0],deliveryWorkflow:false}],tasks:[]});assert.match(legacy,/历史承诺区间（非任务汇总）/);
   const unscheduled=renderPortfolio({...args,tasks:[]});assert.match(unscheduled,/研发任务尚未排期/);assert.doesNotMatch(unscheduled,/portfolio-requirement-bar/);
+});
+
+test('资源管理平台2.0回归：基线后移50天，承诺与任务尚未到期时项目正常',()=>{
+  const project={id:'p1',name:'资源管理平台2.0',targetDate:'2026-11-25'};
+  const requirement=req({deliveryWorkflow:true,planStart:'2026-09-21',planEnd:'2026-11-17',baseline:{planStart:'2026-09-21',planEnd:'2026-09-28'}});
+  const tasks=[task({status:'done',startDate:'2026-09-21',dueDate:'2026-09-24',estimateHours:24}),task({id:'pending',status:'wait',startDate:'2026-10-28',dueDate:'2026-11-15',estimateHours:12})];
+  const summary=projectSummary(project,{requirements:[requirement],tasks,today:'2026-10-04'});
+  assert.equal(summary.state,'normal');assert.equal(summary.lateDays,0);assert.equal(summary.overdueTasks,0);
+  assert.deepEqual(summary.rows[0].reasons,[]);
+  const html=renderPortfolio({projects:[project],requirements:[requirement],tasks,users:[],today:'2026-10-04',state:{...createTimelineState('2026-10-04'),fit:true},filters:{view:'project',project:'all',owner:'all',issues:false},expanded:new Set(['p:p1']),viewportWidth:1440});
+  assert.doesNotMatch(html,/基线|portfolio-baseline|已延期 50 天|已逾期 50 天|status-danger/);
+});
+
+test('任务或需求承诺晚于未来项目目标，只显示预计延期，不计实际逾期',()=>{
+  const project={id:'p1',targetDate:'2026-10-20'};
+  const requirement=req({deliveryWorkflow:true,planEnd:'2026-10-25'});
+  const tasks=[task({status:'wait',startDate:'2026-10-15',dueDate:'2026-10-28'})];
+  const summary=projectSummary(project,{requirements:[requirement],tasks,today});
+  assert.equal(summary.state,'risk');assert.equal(summary.lateDays,0);assert.equal(summary.projectOverdueDays,0);
+  assert.equal(summary.forecastDelayDays,8);assert.equal(summary.rows[0].forecastDelayDays,3);
+  assert.match(healthBadge(summary.state,summary.lateDays,summary),/预计延期 8 天/);
+  assert.match(healthBadge(summary.rows[0].state,0,summary.rows[0]),/预计延期 3 天/);
+  const withinTarget=projectSummary({...project,targetDate:'2026-11-01'},{requirements:[requirement],tasks,today});
+  assert.equal(withinTarget.state,'risk');assert.equal(withinTarget.forecastDelayDays,0);
+  assert.match(healthBadge(withinTarget.state,0,withinTarget),/有风险/);
+});
+
+test('单个未完成任务逾期不能被同一需求的未来任务掩盖，已完成归档终止任务不计',()=>{
+  const requirement=req({deliveryWorkflow:true,planEnd:'2026-10-30'});
+  const tasks=[task({id:'late',dueDate:'2026-10-07'}),task({id:'future',status:'wait',startDate:'2026-10-15',dueDate:'2026-10-25'}),task({id:'done',status:'done',dueDate:'2026-10-01'}),task({id:'archived',archived:true,dueDate:'2026-10-01'}),task({id:'terminated',status:'terminated',dueDate:'2026-10-01'})];
+  const row=requirementHealth(requirement,{tasks,today});
+  assert.equal(row.window.end,'2026-10-25');assert.equal(row.state,'late');assert.equal(row.executionOverdueDays,3);assert.equal(row.overdueTasks,1);assert.equal(row.lateDays,3);
+  assert.match(healthBadge(row.state,row.lateDays,row),/任务逾期 3 天/);
+  const summary=projectSummary({id:'p1',targetDate:'2026-10-30'},{requirements:[requirement],tasks,today});
+  assert.equal(summary.overdueTasks,1);assert.equal(summary.projectOverdueDays,0);
+  assert.match(healthBadge(summary.state,summary.lateDays,summary),/任务逾期 3 天/);
+});
+
+test('交付目标已经过去但任务排到未来，实际交付逾期只取今天减目标日',()=>{
+  const project={id:'p1',targetDate:'2026-10-07'};
+  const requirement=req({deliveryWorkflow:true,planEnd:'2026-10-30'});
+  const tasks=[task({status:'wait',startDate:'2026-10-15',dueDate:'2026-10-25'})];
+  const summary=projectSummary(project,{requirements:[requirement],tasks,today});
+  assert.equal(summary.state,'late');assert.equal(summary.projectOverdueDays,3);assert.equal(summary.lateDays,3);assert.equal(summary.forecastDelayDays,23);
+  assert.match(healthBadge(summary.state,summary.lateDays,summary),/交付逾期 3 天/);assert.doesNotMatch(healthBadge(summary.state,summary.lateDays,summary),/23 天/);
+  const finished=projectSummary(project,{requirements:[{...requirement,status:'已完成'}],tasks,today});
+  assert.equal(finished.state,'done');assert.equal(finished.lateDays,0);assert.equal(finished.overdueTasks,0);
+});
+
+test('已完成任务的历史未来计划不会制造预计延期，截止当天也不算实际逾期',()=>{
+  const requirement=req({deliveryWorkflow:true,planEnd:'2026-10-20'});
+  const tasks=[task({status:'done',dueDate:'2026-12-01',estimateHours:100}),task({id:'pending',status:'wait',startDate:today,dueDate:today,estimateHours:1})];
+  const row=requirementHealth(requirement,{tasks,today});
+  assert.equal(row.executionOverdueDays,0);assert.equal(row.forecastDelayDays,0);assert.equal(row.lateDays,0);
+  const summary=projectSummary({id:'p1',targetDate:'2026-10-25'},{requirements:[requirement],tasks,today});
+  assert.equal(summary.state,'normal');assert.equal(summary.forecastDelayDays,0);assert.equal(summary.lateDays,0);
 });
