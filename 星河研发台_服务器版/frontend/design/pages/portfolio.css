@@ -58,7 +58,6 @@
 .portfolio-requirement-bar { height: 22px; }
 .portfolio-requirement-bar::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: var(--progress); background: var(--on-accent); opacity: .75; }
 .portfolio-requirement-bar.is-risk { box-shadow: 0 0 0 2px var(--c-amber); }
-.portfolio-baseline { position: absolute; top: calc(50% + 14px); height: 3px; border-radius: 2px; background: var(--text-3); opacity: .55; }
 
 /* 按人员：同一人时间重叠的任务分泳道，颜色为项目识别色。 */
 .portfolio-person-row { align-items: stretch; }
@@ -75,7 +74,6 @@
 /* 图例 */
 .portfolio-legend-project { background: linear-gradient(90deg, var(--project-1) 60%, color-mix(in srgb, var(--project-1) 45%, transparent) 60%); }
 .portfolio-legend-risk { background: var(--bar-develop); box-shadow: 0 0 0 2px var(--c-amber); }
-.portfolio-legend-baseline { height: 3px !important; background: var(--text-3); }
 .portfolio-legend-target { width: 2px !important; height: 12px !important; border-radius: 1px !important; background: var(--c-red); }
 .portfolio-legend-swatch { background: var(--project); }
 

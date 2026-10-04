@@ -1,7 +1,7 @@
 // 项目全景与全局甘特图（团队空间）。纯函数：状态判定 + HTML 输出；事件在 app.js 中处理。
-// 判定规则见 改版方案.md §6：需求级「已延期 / 有风险 / 正常」，项目取其需求中最差的状态。
+// 逾期只统计已过截止日的未完成事项；未来延期预测单独显示，历史基线留在需求详情。
 import { esc, toneBadge, metric, metricStrip, panel, empty, segmented, switchToggle } from './ui-kit.js';
-import { taskStage, normalizeBaseline, requirementDeliveryState } from './workflow.js';
+import { taskStage, requirementDeliveryState } from './workflow.js';
 import { parseDay, formatDay, resolveTimelineExtent, resolveTimelineZoom, buildTimelineScale, timelineZoomControls, timelineDateForm, timelineNavigation, timelineAxis, timelineGridlines, timelineChartAttrs, timelineLabelWidth } from './timeline.js';
 
 const RISK_GAP = 0.2;
@@ -38,23 +38,25 @@ export function requirementProgress(requirement, tasks) {
 /**
  * 需求健康度。state：done / terminated / unscheduled / late / risk / normal。
  * 承诺逾期与研发逾期分别计数；未来任务预计晚于承诺仅列为风险。
- * 基线比较仍针对承诺日期，不被任务日期自动覆盖。
+ * 历史基线不参与当前健康度或全局排期展示。
  */
 export function requirementHealth(requirement, { tasks = [], requirements = [], today }) {
   const progress = requirementProgress(requirement, tasks);
   const window=requirementWindow(requirement,tasks);
-  const result = (state, extra = {}) => ({ state, progress, window, lateDays: 0, commitmentOverdueDays:0, executionOverdueDays:0, forecastDelayDays:0, reasons: [], ...extra });
+  const commitmentEnd = parseDay(requirement.planEnd);
+  const result = (state, extra = {}) => ({ state, progress, window, lateDays: 0, commitmentOverdueDays:0, executionOverdueDays:0, forecastDelayDays:0, overdueTasks:0, reasons: [], ...extra });
   if (requirement.status === '已终止') return result('terminated');
   if (requirement.status === '已完成') return result('done');
-  const start = parseDay(window.start), end = parseDay(window.end), now = parseDay(today), commitmentEnd=parseDay(requirement.planEnd);
-  const baselineEnd = parseDay(normalizeBaseline(requirement.baseline)?.planEnd || '');
+  const start = parseDay(window.start), end = parseDay(window.end), now = parseDay(today);
+  const pending = tasks.filter(task=>task.requirementId===requirement.id&&(!task.projectId||task.projectId===requirement.projectId)&&isLive(task)&&!isFinished(task));
+  const pendingEnds = pending.map(task=>parseDay(task.dueDate)).filter(day=>day!==null);
+  const overdueEnds = now===null ? [] : pendingEnds.filter(day=>day<now);
   const commitmentOverdueDays = now!==null&&commitmentEnd!==null&&now>commitmentEnd?now-commitmentEnd:0;
-  const executionOverdueDays = window.source==='tasks'&&progress<1&&now!==null&&end!==null&&now>end?now-end:0;
-  const forecastDelayDays = window.source==='tasks'&&end!==null&&commitmentEnd!==null&&end>commitmentEnd?end-commitmentEnd:0;
-  const slipDays = baselineEnd!==null&&commitmentEnd!==null&&commitmentEnd>baselineEnd?commitmentEnd-baselineEnd:0;
-  const dates={commitmentOverdueDays,executionOverdueDays,forecastDelayDays};
-  const dateReasons=[commitmentOverdueDays?`承诺截止已逾期 ${commitmentOverdueDays} 天`:'',executionOverdueDays?`研发任务区间已逾期 ${executionOverdueDays} 天`:'',forecastDelayDays?`任务预计结束晚于承诺 ${forecastDelayDays} 天`:'',slipDays?`承诺截止较基线后移 ${slipDays} 天`:''].filter(Boolean);
-  if (commitmentOverdueDays || executionOverdueDays || slipDays) return result('late', {...dates,lateDays:Math.max(commitmentOverdueDays,executionOverdueDays,slipDays),reasons:dateReasons});
+  const executionOverdueDays = overdueEnds.length ? now-Math.min(...overdueEnds) : 0;
+  const forecastDelayDays = pendingEnds.length&&commitmentEnd!==null ? Math.max(0,Math.max(...pendingEnds)-commitmentEnd) : 0;
+  const dates={commitmentOverdueDays,executionOverdueDays,forecastDelayDays,overdueTasks:overdueEnds.length};
+  const dateReasons=[commitmentOverdueDays?`承诺截止已逾期 ${commitmentOverdueDays} 天`:'',executionOverdueDays?`${overdueEnds.length} 项未完成任务已逾期，最长 ${executionOverdueDays} 天`:'',forecastDelayDays?`未完成任务预计结束晚于承诺 ${forecastDelayDays} 天`:''].filter(Boolean);
+  if (commitmentOverdueDays || executionOverdueDays) return result('late', {...dates,lateDays:Math.max(commitmentOverdueDays,executionOverdueDays),reasons:dateReasons});
   if (start === null || end === null || start > end) return result('unscheduled', {...dates,reasons:['研发任务尚未排期']});
   const reasons = [];
   if(forecastDelayDays)reasons.push(...dateReasons);
@@ -85,18 +87,28 @@ export function projectSummary(project, { requirements = [], tasks = [], today }
   const progress = totalHours > 0 ? doneHours / totalHours : active.length ? active.filter(row => row.state === 'done').length / active.length : 0;
   const counts = Object.fromEntries(BUCKETS.map(([key]) => [key, 0])); for (const row of active) counts[bucketOf(row.requirement.status)]++;
   const now = parseDay(today), target = parseDay(project.targetDate);
+  const unfinished = active.filter(row=>row.state!=='done');
+  const unfinishedIds = new Set(unfinished.map(row=>row.requirement.id));
+  const pendingTasks = projectTasks.filter(task=>unfinishedIds.has(task.requirementId)&&isLive(task)&&!isFinished(task));
+  const pendingEnds = pendingTasks.map(task=>parseDay(task.dueDate)).filter(day=>day!==null);
+  const commitmentEnds = unfinished.map(row=>parseDay(row.requirement.planEnd)).filter(day=>day!==null);
+  const projectOverdueDays = unfinished.length&&now!==null&&target!==null ? Math.max(0,now-target) : 0;
+  const commitmentOverdueDays = Math.max(0,...unfinished.map(row=>row.commitmentOverdueDays));
+  const executionOverdueDays = Math.max(0,...unfinished.map(row=>row.executionOverdueDays));
+  const taskForecastDelayDays = target!==null&&pendingEnds.length ? Math.max(0,Math.max(...pendingEnds)-target) : 0;
+  const commitmentForecastDelayDays = target!==null&&commitmentEnds.length ? Math.max(0,Math.max(...commitmentEnds)-target) : 0;
+  const forecastDelayDays = Math.max(taskForecastDelayDays,commitmentForecastDelayDays);
   const late = active.filter(row => row.state === 'late'), risk = active.filter(row => row.state === 'risk');
-  let lateDays = Math.max(0, ...late.map(row => row.lateDays));
-  const reasons = late.length ? [`${late.length} 条需求已延期`] : [];
-  if (end !== null && target !== null && end > target && active.some(row => row.state !== 'done')) { lateDays = Math.max(lateDays, end - target); reasons.push(`最晚需求结束日比目标日期晚 ${end - target} 天`); }
-  const state = !active.length ? 'empty' : active.every(row => row.state === 'done') ? 'done' : lateDays > 0 ? 'late' : risk.length ? 'risk' : 'normal';
-  if (state === 'risk') reasons.push(`${risk.length} 条需求有风险`);
-  const overdueTasks = projectTasks.filter(task => isLive(task) && !isFinished(task) && parseDay(task.dueDate) !== null && now !== null && parseDay(task.dueDate) < now).length;
+  const lateDays = Math.max(projectOverdueDays,commitmentOverdueDays,executionOverdueDays);
+  const reasons = [projectOverdueDays?`项目交付截止已逾期 ${projectOverdueDays} 天`:'',commitmentOverdueDays?`${late.filter(row=>row.commitmentOverdueDays>0).length} 条需求承诺逾期，最长 ${commitmentOverdueDays} 天`:'',executionOverdueDays?`未完成任务已逾期，最长 ${executionOverdueDays} 天`:'',taskForecastDelayDays?`未完成任务预计结束晚于项目目标 ${taskForecastDelayDays} 天`:'',commitmentForecastDelayDays?`需求承诺晚于项目目标 ${commitmentForecastDelayDays} 天`:''].filter(Boolean);
+  const state = !active.length ? 'empty' : !unfinished.length ? 'done' : lateDays > 0 ? 'late' : risk.length||forecastDelayDays ? 'risk' : 'normal';
+  if (risk.length) reasons.push(`${risk.length} 条需求有风险`);
+  const overdueTasks = pendingTasks.filter(task => parseDay(task.dueDate) !== null && now !== null && parseDay(task.dueDate) < now).length;
   const preparation=active.filter(row=>!['未确定','待评审','已完成','已终止'].includes(row.requirement.status)).map(row=>requirementDeliveryState(row.requirement,projectTasks.filter(task=>task.requirementId===row.requirement.id),reqs));
   const backlog = { review: active.filter(row => ['未确定', '待评审'].includes(row.requirement.status)).length, split: preparation.filter(state=>!state.planReady).length, schedule: preparation.filter(state=>state.planReady&&!state.scheduleReady).length };
   const milestones = (project.milestones || []).filter(item => parseDay(item.date) !== null).sort((a, b) => a.date.localeCompare(b.date));
   const next = milestones.find(item => now === null || parseDay(item.date) >= now) || null;
-  return { project, rows, start: start === null ? '' : formatDay(start), end: end === null ? '' : formatDay(end), progress, counts, total: active.length, done: counts.done, state, lateDays, reasons, overdueTasks, backlog, unscheduled: preparation.filter(item=>!item.scheduleReady).length, nextMilestone: next ? { ...next, daysLeft: now === null ? null : parseDay(next.date) - now } : null, milestones };
+  return { project, rows, start: start === null ? '' : formatDay(start), end: end === null ? '' : formatDay(end), progress, counts, total: active.length, done: counts.done, state, lateDays, projectOverdueDays, commitmentOverdueDays, executionOverdueDays, forecastDelayDays, reasons, overdueTasks, backlog, unscheduled: preparation.filter(item=>!item.scheduleReady).length, nextMilestone: next ? { ...next, daysLeft: now === null ? null : parseDay(next.date) - now } : null, milestones };
 }
 
 /** 同一天最多同时推进的项目数（按任务起止日计算）。 */
@@ -117,16 +129,23 @@ export function packLanes(items) {
   return { items: placed, lanes: lanes.length };
 }
 
-const HEALTH = { late: ['danger', '已延期'], risk: ['test', '有风险'], normal: ['done', '正常'], done: ['done', '已完成'], unscheduled: ['plan', '待排期'], terminated: ['terminated', '已终止'], empty: ['plan', '暂无需求'] };
-export function healthBadge(state, lateDays = 0) { const [tone, label] = HEALTH[state] || HEALTH.normal; return toneBadge(tone, state === 'late' && lateDays ? `${label} ${lateDays} 天` : label); }
+const HEALTH = { late: ['danger', '已逾期'], risk: ['test', '有风险'], normal: ['done', '正常'], done: ['done', '已完成'], unscheduled: ['plan', '待排期'], terminated: ['terminated', '已终止'], empty: ['plan', '暂无需求'] };
+export function healthBadge(state, lateDays = 0, detail = {}) {
+  const [tone, label] = HEALTH[state] || HEALTH.normal;
+  if(state==='late') {
+    for(const [key,title] of [['projectOverdueDays','交付逾期'],['commitmentOverdueDays','承诺逾期'],['executionOverdueDays','任务逾期']]) if(detail[key]>0)return toneBadge(tone,`${title} ${detail[key]} 天`);
+    return toneBadge(tone,lateDays?`${label} ${lateDays} 天`:label);
+  }
+  return toneBadge(tone,state==='risk'&&detail.forecastDelayDays>0?`预计延期 ${detail.forecastDelayDays} 天`:label);
+}
 
 /** 全局甘特图的时间范围：所有可见项目的周期、里程碑、需求与任务日期。app.js 的缩放/拖动沿用排期页逻辑。 */
 export function portfolioTimelineContext({ projects, requirements, tasks, today }) {
   const days = projects.flatMap(project => [project.startDate, project.targetDate]).map(parseDay).filter(day => day !== null);
   const ids = new Set(projects.map(project => project.id));
   const items = [...requirements.filter(item => ids.has(item.projectId) && !item.archived).flatMap(item => {
-    const window=requirementWindow(item,tasks),baseline=normalizeBaseline(item.baseline);
-    return [{startDate:window.start,dueDate:window.end},{startDate:item.planStart,dueDate:item.planEnd},...(baseline?[{startDate:baseline.planStart,dueDate:baseline.planEnd}]:[])];
+    const window=requirementWindow(item,tasks);
+    return [{startDate:window.start,dueDate:window.end},{startDate:item.planStart,dueDate:item.planEnd}];
   }), ...tasks.filter(item => ids.has(item.projectId) && isLive(item))];
   return { project: { startDate: days.length ? formatDay(Math.min(...days)) : '', targetDate: days.length ? formatDay(Math.max(...days)) : '', milestones: projects.flatMap(project => project.milestones || []) }, tasks: items, today };
 }
@@ -143,8 +162,8 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
   const unscheduled = summaries.reduce((sum, item) => sum + item.backlog.schedule, 0);
   const metrics = metricStrip([
     metric('进行中项目', String(summaries.filter(item => item.state !== 'done').length), `共 ${summaries.length} 个可见项目`, 'folder', 'blue'),
-    metric('已延期项目', String(count('late')), '按最差的需求或目标日期判定', 'alert', '', count('late') > 0),
-    metric('有风险项目', String(count('risk')), '预计晚于承诺、进度滞后或前置未完成', 'flag', 'amber'),
+    metric('存在逾期的项目', String(count('late')), '仅统计实际任务、承诺或交付逾期', 'alert', '', count('late') > 0),
+    metric('有风险项目', String(count('risk')), '预计延期、进度滞后或前置未完成', 'flag', 'amber'),
     metric('待排期需求', String(unscheduled), '拆分齐备但任务日期尚未完善', 'calendar', 'purple'),
   ]);
 
@@ -155,8 +174,8 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
   };
   const segments = item => `<div class="portfolio-progress"><div class="portfolio-segments" role="img" aria-label="${BUCKETS.map(([key]) => `${SEGMENT_LABEL[key]} ${item.counts[key]} 条`).join('，')}">${item.total ? BUCKETS.filter(([key]) => item.counts[key]).map(([key]) => `<span class="portfolio-segment portfolio-segment-${key}" style="width:${number(item.counts[key] / item.total * 100)}%" title="${SEGMENT_LABEL[key]} ${item.counts[key]} 条"></span>`).join('') : ''}</div><span class="item-meta">完成 ${item.done} / ${item.total} · 进度 ${percent(item.progress)}</span></div>`;
   const backlog = item => { const parts = [['待评审', item.backlog.review], ['待拆分', item.backlog.split], ['待排期', item.backlog.schedule]].filter(([, value]) => value); return parts.length ? parts.map(([label, value]) => `${label} ${value}`).join(' · ') : '<span class="muted">无</span>'; };
-  const overviewRows = summaries.map(item => `<tr><td class="title-cell"><span class="portfolio-project-name"><span class="project-glyph portfolio-glyph" style="--project:${colorOf(item.project.id)}" aria-hidden="true">${esc([...item.project.name][0] || '项')}</span><span><a class="item-title" href="#/p/${encodeURIComponent(item.project.id)}/overview">${esc(item.project.name)}</a><span class="item-meta">负责人 ${esc(nameOf(item.project.ownerId))} · 目标 ${esc(item.project.targetDate || '未设置')}</span></span></span></td><td>${nextCell(item)}</td><td>${segments(item)}</td><td><span title="${esc(item.reasons.join('；'))}">${healthBadge(item.state, item.lateDays)}</span></td><td class="num-cell${item.overdueTasks ? ' overdue-text' : ''}">${item.overdueTasks}</td><td class="portfolio-backlog">${backlog(item)}</td></tr>`).join('');
-  const overview = panel({ title: '项目概况', count: summaries.length, bodyHtml: `<div class="table-wrap"><table class="data-table"><thead><tr><th>项目</th><th>下一节点</th><th>需求进度</th><th>状态</th><th class="num-cell">逾期任务</th><th>积压</th></tr></thead><tbody>${overviewRows}</tbody></table></div>`, noteHtml: '研发周期由有效任务日期汇总，承诺日期与基线独立保留。承诺逾期、未完成研发区间逾期或承诺较基线后移显示「已延期」；任务预计晚于承诺、部分任务未排期、进度滞后或前置未完成显示「有风险」。历史记录尚无任务日期时，仅以承诺区间作参考。' });
+  const overviewRows = summaries.map(item => `<tr><td class="title-cell"><span class="portfolio-project-name"><span class="project-glyph portfolio-glyph" style="--project:${colorOf(item.project.id)}" aria-hidden="true">${esc([...item.project.name][0] || '项')}</span><span><a class="item-title" href="#/p/${encodeURIComponent(item.project.id)}/overview">${esc(item.project.name)}</a><span class="item-meta">负责人 ${esc(nameOf(item.project.ownerId))} · 目标 ${esc(item.project.targetDate || '未设置')}</span></span></span></td><td>${nextCell(item)}</td><td>${segments(item)}</td><td><span title="${esc(item.reasons.join('；'))}">${healthBadge(item.state, item.lateDays, item)}</span></td><td class="num-cell${item.overdueTasks ? ' overdue-text' : ''}">${item.overdueTasks}</td><td class="portfolio-backlog">${backlog(item)}</td></tr>`).join('');
+  const overview = panel({ title: '项目概况', count: summaries.length, bodyHtml: `<div class="table-wrap"><table class="data-table"><thead><tr><th>项目</th><th>下一节点</th><th>需求进度</th><th>状态</th><th class="num-cell">逾期任务</th><th>积压</th></tr></thead><tbody>${overviewRows}</tbody></table></div>`, noteHtml: '只有未完成任务、需求承诺或项目交付截止日已经过去，才显示实际逾期；未来任务或承诺晚于交付目标显示预计延期。研发周期按有效任务汇总，历史记录缺少任务日期时仅以当前承诺区间作参考。' });
 
   // ---------- Gantt ----------
   const shown = summaries.filter(item => (filters.project === 'all' || item.project.id === filters.project) && (!filters.issues || ['late', 'risk'].includes(item.state)));
@@ -178,14 +197,14 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
   };
   const requirementRow = (row, projectTasks) => {
     const req = row.requirement, key = 'r:' + req.id, children = projectTasks.filter(task => task.requirementId === req.id && !task.archived && ownerMatch(task.ownerId) && matchesQuery(q, task.title, task.id, req.title, req.id));
-    const window=row.window,bar = span(window.start,window.end),commitment=span(req.planStart,req.planEnd),baseline = normalizeBaseline(req.baseline), base = baseline && span(baseline.planStart || req.planStart, baseline.planEnd);
+    const window=row.window,bar = span(window.start,window.end),commitment=span(req.planStart,req.planEnd);
     const tone = row.state === 'late' ? ' is-overdue' : row.state === 'risk' ? ' is-risk' : '';
     const stage = { '开发中': 'develop', '测试中': 'test', '已完成': 'done', '已终止': 'terminated' }[req.status] || 'wait';
     const open = expanded.has(key) || Boolean(q);
     const title = `${req.title}（${percent(row.progress)}）`;
     const windowLabel=window.source==='legacy'?'历史承诺区间（非任务汇总）':window.complete?'研发周期':'研发周期（任务日期待完善）';
     const commitmentLabel=req.planStart||req.planEnd?` · 承诺 ${req.planStart||'未设置'} — ${req.planEnd||'未设置'}`:'';
-    const html = `<div class="schedule-row portfolio-row portfolio-level-1"><div class="schedule-name">${children.length ? toggle(key, req.title) : spacer}<span class="portfolio-name-copy"><button class="schedule-task-name" data-requirement="${esc(req.id)}">${esc(req.title)}</button><small>${esc(nameOf(req.assigneeId))}<span>·</span>${esc(req.status)}${window.source==='legacy'?'<span>·</span>历史承诺区间':''}${row.state === 'late' ? `<span class="schedule-late-label">已延期 ${row.lateDays} 天</span>` : row.state === 'risk' ? '<span class="portfolio-risk-label">有风险</span>' : ''}</small></span></div><div class="schedule-track">${commitment&&window.source!=='legacy'?`<span class="portfolio-cycle" style="left:${commitment.left}px;width:${commitment.width}px" title="承诺区间 ${esc(req.planStart)} — ${esc(req.planEnd)}" role="img" aria-label="承诺区间 ${esc(req.planStart)} 至 ${esc(req.planEnd)}"></span>`:''}${base&&(!bar||base.left!==bar.left||base.width!==bar.width)?`<span class="portfolio-baseline" style="left:${base.left}px;width:${base.width}px" title="承诺基线 ${esc(baseline.planStart||req.planStart)} — ${esc(baseline.planEnd)}"></span>`:''}${bar ? `<button data-requirement="${esc(req.id)}" class="schedule-bar schedule-bar-${stage} portfolio-requirement-bar${tone}${bar.width >= timelineLabelWidth(title) ? '' : ' is-compact'}" style="left:${bar.left}px;width:${bar.width}px;--progress:${number(row.progress * 100)}%" title="${esc(req.title)} · ${windowLabel} ${window.start} — ${window.end}${esc(commitmentLabel)} · 进度 ${percent(row.progress)}${row.reasons.length ? ' · ' + esc(row.reasons.join('；')) : ''}" aria-label="${esc(req.title)}，${windowLabel} ${window.start} 至 ${window.end}${esc(commitmentLabel)}，进度 ${percent(row.progress)}${row.reasons.length?'，'+esc(row.reasons.join('；')):''}">${bar.width >= timelineLabelWidth(title) ? `<span>${esc(title)}</span>` : ''}</button>${outsideLabel(bar, title)}` : '<span class="portfolio-undated">研发任务尚未排期</span>'}</div></div>`;
+    const html = `<div class="schedule-row portfolio-row portfolio-level-1"><div class="schedule-name">${children.length ? toggle(key, req.title) : spacer}<span class="portfolio-name-copy"><button class="schedule-task-name" data-requirement="${esc(req.id)}">${esc(req.title)}</button><small>${esc(nameOf(req.assigneeId))}<span>·</span>${esc(req.status)}${window.source==='legacy'?'<span>·</span>历史承诺区间':''}${['late','risk'].includes(row.state)?healthBadge(row.state,row.lateDays,row):''}</small></span></div><div class="schedule-track">${commitment&&window.source!=='legacy'?`<span class="portfolio-cycle" style="left:${commitment.left}px;width:${commitment.width}px" title="承诺区间 ${esc(req.planStart)} — ${esc(req.planEnd)}" role="img" aria-label="承诺区间 ${esc(req.planStart)} 至 ${esc(req.planEnd)}"></span>`:''}${bar ? `<button data-requirement="${esc(req.id)}" class="schedule-bar schedule-bar-${stage} portfolio-requirement-bar${tone}${bar.width >= timelineLabelWidth(title) ? '' : ' is-compact'}" style="left:${bar.left}px;width:${bar.width}px;--progress:${number(row.progress * 100)}%" title="${esc(req.title)} · ${windowLabel} ${window.start} — ${window.end}${esc(commitmentLabel)} · 进度 ${percent(row.progress)}${row.reasons.length ? ' · ' + esc(row.reasons.join('；')) : ''}" aria-label="${esc(req.title)}，${windowLabel} ${window.start} 至 ${window.end}${esc(commitmentLabel)}，进度 ${percent(row.progress)}${row.reasons.length?'，'+esc(row.reasons.join('；')):''}">${bar.width >= timelineLabelWidth(title) ? `<span>${esc(title)}</span>` : ''}</button>${outsideLabel(bar, title)}` : '<span class="portfolio-undated">研发任务尚未排期</span>'}</div></div>`;
     return html + (open ? children.sort(byStart('startDate')).map(task => taskRow(task, 2)).join('') : '');
   };
   const projectRows = shown.map(item => {
@@ -197,7 +216,7 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
     const target = parseDay(project.targetDate);
     const marks = item.milestones.filter(mark => parseDay(mark.date) >= extent.startDay && parseDay(mark.date) <= extent.endDay).map(mark => `<span class="portfolio-milestone${mark.kind === 'target' || mark.date === project.targetDate ? ' is-target' : ''}" style="left:${x(parseDay(mark.date) + .5)}px" title="${esc(mark.label || mark.name || '里程碑')} · ${esc(mark.date)}" role="img" aria-label="${esc(mark.label || mark.name || '里程碑')}，${esc(mark.date)}">◆</span>`).join('');
     const label = `${project.name} · ${percent(item.progress)}`;
-    const meta = [`${esc(nameOf(project.ownerId))}`, item.unscheduled ? `待排期 ${item.unscheduled} 条` : '', item.state === 'late' ? `<span class="schedule-late-label">已延期 ${item.lateDays} 天</span>` : item.state === 'risk' ? '<span class="portfolio-risk-label">有风险</span>' : ''].filter(Boolean).join('<span>·</span>');
+    const meta = [`${esc(nameOf(project.ownerId))}`, item.unscheduled ? `待排期 ${item.unscheduled} 条` : '', ['late','risk'].includes(item.state)?healthBadge(item.state,item.lateDays,item):''].filter(Boolean).join('<span>·</span>');
     const head = `<div class="schedule-row portfolio-row portfolio-level-0"><div class="schedule-name">${reqRows.length ? toggle(key, project.name) : spacer}<span class="portfolio-name-copy"><a class="schedule-task-name" href="#/p/${encodeURIComponent(project.id)}/timeline">${esc(project.name)}</a><small>${meta}</small></span></div><div class="schedule-track">${cycle ? `<span class="portfolio-cycle" style="left:${cycle.left}px;width:${cycle.width}px" title="项目周期 ${esc(project.startDate)} — ${esc(project.targetDate)}"></span>` : ''}${bar ? `<span class="portfolio-project-bar${item.state === 'late' ? ' is-late' : ''}" style="left:${bar.left}px;width:${bar.width}px;--project:${colorOf(project.id)};--progress:${number(item.progress * 100)}%" title="${esc(project.name)} · 需求排期 ${item.start} — ${item.end} · 进度 ${percent(item.progress)}${item.reasons.length ? ' · ' + esc(item.reasons.join('；')) : ''}">${bar.width >= timelineLabelWidth(label) ? `<span>${esc(label)}</span>` : ''}</span>${outsideLabel(bar, label)}` : ''}${marks}${target !== null && target >= extent.startDay && target <= extent.endDay ? `<i class="portfolio-target-line" style="left:${x(target + .5)}px" aria-hidden="true"></i>` : ''}</div></div>`;
     return head + (open ? reqRows.sort((a, b) => (parseDay(a.window.start) ?? Infinity) - (parseDay(b.window.start) ?? Infinity) || String(a.requirement.id).localeCompare(String(b.requirement.id))).map(row => requirementRow(row, projectTasks)).join('') : '');
   }).join('');
@@ -221,12 +240,12 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
   const rowsHtml = filters.view === 'person' ? personRows : projectRows;
   const people2 = [...new Set(tasks.filter(task => shownIds.has(task.projectId) && !task.archived && task.ownerId).map(task => task.ownerId).concat(requirements.filter(item => shownIds.has(item.projectId) && item.assigneeId).map(item => item.assigneeId)))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'zh-CN'));
   const selected = (value, current) => value === current ? ' selected' : '';
-  const controls = `<div class="schedule-controls">${segmented([{ value: 'project', label: '按项目' }, { value: 'person', label: '按人员' }], filters.view, 'portfolio-view', '甘特图视图')}${timelineZoomControls(state, zoom, scale, px)}<div class="schedule-filters"><label><span>项目</span><select data-portfolio-filter="project" aria-label="按项目筛选"><option value="all"${selected('all', filters.project)}>全部项目</option>${visible.map(project => `<option value="${esc(project.id)}"${selected(project.id, filters.project)}>${esc(project.name)}</option>`).join('')}</select></label><label><span>负责人</span><select data-portfolio-filter="owner" aria-label="按负责人筛选"><option value="all"${selected('all', filters.owner)}>全部负责人</option>${people2.map(id => `<option value="${esc(id)}"${selected(id, filters.owner)}>${esc(nameOf(id))}</option>`).join('')}</select></label>${switchToggle('portfolio-issues', '只看延期 / 有风险', filters.issues)}</div></div>${timelineDateForm(state)}`;
+  const controls = `<div class="schedule-controls">${segmented([{ value: 'project', label: '按项目' }, { value: 'person', label: '按人员' }], filters.view, 'portfolio-view', '甘特图视图')}${timelineZoomControls(state, zoom, scale, px)}<div class="schedule-filters"><label><span>项目</span><select data-portfolio-filter="project" aria-label="按项目筛选"><option value="all"${selected('all', filters.project)}>全部项目</option>${visible.map(project => `<option value="${esc(project.id)}"${selected(project.id, filters.project)}>${esc(project.name)}</option>`).join('')}</select></label><label><span>负责人</span><select data-portfolio-filter="owner" aria-label="按负责人筛选"><option value="all"${selected('all', filters.owner)}>全部负责人</option>${people2.map(id => `<option value="${esc(id)}"${selected(id, filters.owner)}>${esc(nameOf(id))}</option>`).join('')}</select></label>${switchToggle('portfolio-issues', '只看逾期 / 有风险', filters.issues)}</div></div>${timelineDateForm(state)}`;
   const expandAll = filters.view === 'project' ? `<div class="portfolio-expand"><button type="button" class="text-button" data-portfolio-expand="all">全部展开</button><button type="button" class="text-button" data-portfolio-expand="none">全部收起</button></div>` : '';
   const legend = filters.view === 'project'
-    ? '<div class="schedule-legend"><span><i class="portfolio-legend-project"></i>项目（深色为已完成进度）</span><span><i class="schedule-legend-active"></i>研发周期 / 任务</span><span>虚线框：承诺区间</span><span><i class="portfolio-legend-risk"></i>有风险</span><span><i class="schedule-legend-late"></i>已延期</span><span><i class="portfolio-legend-baseline"></i>承诺基线</span><span><i class="portfolio-legend-target"></i>目标日期</span>' + (todayInside ? '<span><i class="schedule-legend-today"></i>今天</span>' : '') + '</div>'
+    ? '<div class="schedule-legend"><span><i class="portfolio-legend-project"></i>项目（深色为已完成进度）</span><span><i class="schedule-legend-active"></i>研发周期 / 任务</span><span>虚线框：承诺区间</span><span><i class="portfolio-legend-risk"></i>有风险</span><span><i class="schedule-legend-late"></i>实际逾期</span><span><i class="portfolio-legend-target"></i>目标日期</span>' + (todayInside ? '<span><i class="schedule-legend-today"></i>今天</span>' : '') + '</div>'
     : `<div class="schedule-legend">${shown.map(item => `<span><i class="portfolio-legend-swatch" style="--project:${colorOf(item.project.id)}"></i>${esc(item.project.name)}</span>`).join('')}<span><i class="schedule-legend-late"></i>已逾期</span></div>`;
-  const emptyChart = rowsHtml ? '' : `<div class="schedule-chart-empty"><strong>${filters.view === 'person' ? '没有已分配的未完成任务' : '没有符合条件的项目'}</strong><span>${filters.view === 'person' ? '主开发拆分任务并指定负责人后，每个人的并行负载会显示在这里。' : '调整项目、负责人或「只看延期 / 有风险」后再次查看。'}</span></div>`;
+  const emptyChart = rowsHtml ? '' : `<div class="schedule-chart-empty"><strong>${filters.view === 'person' ? '没有已分配的未完成任务' : '没有符合条件的项目'}</strong><span>${filters.view === 'person' ? '主开发拆分任务并指定负责人后，每个人的并行负载会显示在这里。' : '调整项目、负责人或「只看逾期 / 有风险」后再次查看。'}</span></div>`;
   const chart = `<div class="schedule-scroll${zoom.isFit ? ' is-fit' : ''}" role="region" aria-label="全局甘特图。按住拖动查看，⌘ 或 Ctrl 加滚轮缩放" tabindex="0"><div class="schedule-chart portfolio-chart" ${timelineChartAttrs(extent, zoom, px, todayInside, todayDay)} style="--track:${number(zoom.trackWidth)}px">${timelineGridlines(scale, todayInside, x(todayDay + .5))}${timelineAxis(scale, todayDay, px, filters.view === 'person' ? '人员 / 未完成任务' : '项目 / 需求 / 任务')}${rowsHtml}${emptyChart}</div></div>`;
   const range = `<div class="schedule-range"><div class="schedule-range-copy"><h2 data-timeline-visible>${extent.start} <span>—</span> ${extent.end}</h2><p>${extent.empty ? '还没有排期日期，暂显示当前月份。' : `覆盖 ${shown.length} 个项目，${extent.dataStart} — ${extent.dataEnd}。${zoom.isFit ? '当前为全局视图，放大后可拖动查看。' : '按住图表拖动查看，⌘/Ctrl + 滚轮缩放。'}`}</p></div>${timelineNavigation(state, extent, zoom, todayInside)}</div>`;
   const gantt = `<section class="panel schedule-panel">${controls}${range}</section><section class="panel schedule-panel"><div class="schedule-chart-heading"><h2>全局甘特图</h2><span>${scale.label}显示${zoom.isFit ? ' · 全局' : ''}</span>${expandAll}${legend}</div>${chart}</section>`;
