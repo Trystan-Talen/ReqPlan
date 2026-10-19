@@ -4,10 +4,10 @@ import { esc } from './ui-kit.js';
 export const escapeHtml = esc;
 const fields = {title:'标题',name:'名称',description:'背景与说明',acceptance:'验收标准',priority:'优先级',status:'状态',assigneeId:'主责开发',ownerId:'负责人',collaboratorIds:'协作成员',planStart:'承诺开始',planEnd:'承诺截止',developmentStart:'研发开始',developmentEnd:'研发截止',startDate:'开始日期',dueDate:'截止日期',targetDate:'目标交付',estimatePoints:'需求点数',estimateHours:'预估工时',source:'需求来源',requirementId:'关联需求',dependencyIds:'前置任务',milestones:'里程碑',archived:'归档状态',proposerName:'提出人',decisionReason:'评估说明',planSubmitted:'研发计划已提交',deliveryWorkflow:'自动流转已启用',workflowHold:'整改待处理',originProposalId:'来源提议'};
 const statusLabels = {wait:'待开始',develop:'开发中',test:'测试中',done:'已完成',terminated:'已终止',active:'已启用',disabled:'已停用'};
-function valueText(key,value,nameOf) {
+function valueText(key,value,nameOf = item => item) {
   if (value === undefined || value === null || value === '') return '未设置';
   if (['assigneeId','ownerId'].includes(key)) return nameOf(value);
-  if (key === 'collaboratorIds') return value.map(nameOf).join('、') || '无';
+  if (key === 'collaboratorIds') return (Array.isArray(value) ? value : []).map(nameOf).join('、') || '无';
   if (key === 'status') return statusLabels[value] || value;
   if (key === 'milestones' && Array.isArray(value)) return value.map(item => `${item.label || item.name}：${item.date || '未设置'}`).join('\n') || '无';
   if (Array.isArray(value)) return value.join('、') || '无';
@@ -25,7 +25,7 @@ export function auditChanges(entry,nameOf = value => value) {
   if (!detail.before || !detail.after || typeof detail.before!=='object' || typeof detail.after!=='object') return [];
   return Object.entries(fields).filter(([key]) => JSON.stringify(detail.before[key]) !== JSON.stringify(detail.after[key])).map(([key,label]) => ({label:entry.entityType==='task'&&key==='description'?'任务内容':label,before:valueText(key,detail.before[key],nameOf),after:valueText(key,detail.after[key],nameOf)}));
 }
-export function renderAuditEntry(entry,{actor='',summary='',stamp='',nameOf} = {}) {
+export function renderAuditEntry(entry,{actor='',summary='',stamp='',nameOf = value => value} = {}) {
   const changes = auditChanges(entry,nameOf);
   const detail = entry.detail;
   const oldText = typeof detail === 'string' ? detail : '';

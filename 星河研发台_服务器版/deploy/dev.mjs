@@ -59,13 +59,18 @@ export function waitForMessage(child,{type,instanceId,timeoutMs=20000,signal}) {
 }
 
 function frontendHandler(apiPort) {
-  const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'};
+  const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'};
   const frontend=path.join(root,'frontend');
   return (req,res)=>{
     if(req.url.startsWith('/api/')) {
       if(!apiPort()){res.writeHead(503,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'接口服务暂未就绪。'}));}
       const proxy=http.request({hostname:'127.0.0.1',port:apiPort(),path:req.url,method:req.method,headers:req.headers},upstream=>{res.writeHead(upstream.statusCode,upstream.headers);upstream.pipe(res);});
-      proxy.on('error',()=>{if(!res.headersSent)res.writeHead(502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:'接口服务暂未就绪。'}));});
+      // The upstream may fail after beginning a response. Avoid writing a second
+      // response (or ending an already finished stream) in that race.
+      proxy.on('error',()=>{
+        if (!res.headersSent) res.writeHead(502, {'Content-Type':'application/json; charset=utf-8'});
+        if (!res.writableEnded) res.end(JSON.stringify({error:'接口服务暂未就绪。'}));
+      });
       req.pipe(proxy);return;
     }
     if(!['GET','HEAD'].includes(req.method)){res.writeHead(405);return res.end();}

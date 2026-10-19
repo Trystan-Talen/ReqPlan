@@ -1,6 +1,6 @@
 import { api, rows, setCsrf, ApiError } from './api.js';
 import { createTimelineState, renderTimeline, resolveTimelineRange } from './timeline.js';
-import { availableRequirementActions, availableTaskStatuses, roleCan, ROLE_LABELS, OWNER_ROLES, LEAD_REQUIREMENT_FIELDS, requirementDeliveryState } from './workflow.js';
+import { availableRequirementActions, availableTaskStatuses, roleCan, ROLE_LABELS, OWNER_ROLES, LEAD_REQUIREMENT_FIELDS, requirementDeliveryState, taskStage, TASK_STATUS_LABELS } from './workflow.js';
 import { renderAuditEntry, renderBaseline, renderErrorDetails, renderTextComparison } from './review-ui.js';
 import { blankTask, readBatchForm, renderBatchRows, renderBatchSummary } from './task-batch.js';
 import { renderPersonalWork, renderReminders, renderReports } from './work-ui.js';
@@ -24,8 +24,7 @@ function toggleTheme() {
   root.dataset.theme = dark ? 'light' : 'dark';
   try { localStorage.setItem('xinghe:theme', root.dataset.theme); } catch (_) {}
 }
-const TASK_STATUS = { wait: '待开始', develop: '开发中', test: '测试中', done: '已完成', terminated: '已终止' };
-const taskStage = value => ({'待开始':'wait','开发中':'develop','测试中':'test','已完成':'done','已终止':'terminated'}[value] || value);
+const TASK_STATUS = TASK_STATUS_LABELS;
 const REQUEST_STATUS = [ '已确定', '待排期', '已排期', '开发中', '测试中', '已完成', '已终止'];
 const PROPOSAL_STATUS = ['待评估','评估中','待补充','暂缓','不采纳','已转需求'];
 const MEMBER_ROLE = ROLE_LABELS;
@@ -119,7 +118,7 @@ function presentError(error, container) {
   if (error.status === 401 && user) { user = null; setCsrf(''); closeDialog(); renderAuth('login', '会话已结束，请重新登录。'); return; }
   const text = error.code === 'VERSION_CONFLICT' ? `内容已被其他成员更新。${error.message} 重新载入会放弃本次尚未保存的修改。` : error.message || '操作未完成，请重试。';
   if (container) { container.hidden = false; container.innerHTML = `<span>${esc(text)}</span>${renderErrorDetails(error.details)}${error.code === 'VERSION_CONFLICT' ? '<button type="button" class="text-button" data-action="refresh">重新载入最新内容</button>' : ''}`; container.focus(); }
-  else if (error.code === 'VERSION_CONFLICT') { $('#page-alert').innerHTML = `<div class="notice notice-danger server-error"><span>${esc(text)}</span><button class="btn btn-secondary btn-small" data-action="refresh">重新载入</button></div>`; }
+  else if (error.code === 'VERSION_CONFLICT') { const alert = $('#page-alert'); if (alert) alert.innerHTML = `<div class="notice notice-danger server-error"><span>${esc(text)}</span><button class="btn btn-secondary btn-small" data-action="refresh">重新载入</button></div>`; else toast(text, true); }
   else { const alert=$('#page-alert'); if(alert) alert.innerHTML=`<div class="notice notice-danger server-error" role="alert"><span>${esc(text)}</span>${renderErrorDetails(error.details)}<button class="text-button" data-action="dismiss-alert">关闭提示</button></div>`; else toast(text,true); }
 }
 async function reload() {

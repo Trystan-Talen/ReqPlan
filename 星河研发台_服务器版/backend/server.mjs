@@ -22,6 +22,12 @@ async function readJson(req) {
   return value;
 }
 function json(res,status,value,headers={}) { res.writeHead(status,{'Content-Type':'application/json; charset=utf-8',...headers});res.end(JSON.stringify(value)); }
+function decodeBase64(value, label) {
+  if (typeof value !== 'string' || !value.length || value.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) {
+    throw fail(400, 'INVALID_FILE', `${label}编码无效。`);
+  }
+  return Buffer.from(value, 'base64');
+}
 function param(raw) { try { const value=decodeURIComponent(raw); if(!/^[a-zA-Z0-9_-]{1,100}$/.test(value)) throw 0;return value; } catch { throw fail(400,'INVALID_ID','记录编号无效。'); } }
 
 export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secureCookies=true,trustProxy=false,logger=console,instanceId=null,setupToken='',setupTtlMs=24*60*60*1000,now=()=>Date.now(),backupService=null}={}) {
@@ -155,8 +161,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
         if(method==='GET') return json(res,200,{attachments:business.listAttachments(actor,id)});
         if(method==='POST') {
           const input=await readJson(req);
-          if(typeof input.content!=='string'||!input.content.length||input.content.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(input.content)) throw fail(400,'INVALID_FILE','附件编码无效。');
-          return json(res,201,business.uploadAttachment(actor,id,{name:input.name,mime:input.mime,contentBuffer:Buffer.from(input.content,'base64'),logicalId:input.logicalId,expectedVersion:input.expectedVersion}));
+          return json(res,201,business.uploadAttachment(actor,id,{name:input.name,mime:input.mime,contentBuffer:decodeBase64(input.content,'附件'),logicalId:input.logicalId,expectedVersion:input.expectedVersion}));
         }
       }
       if((match=endpoint.match(/^\/api\/projects\/([^/]+)\/documents$/))) {
@@ -164,9 +169,8 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
         if(method==='GET') return json(res,200,{documents:business.listDocuments(actor,id)});
         if(method==='POST') {
           const input=await readJson(req);
-          if(typeof input.content!=='string'||!input.content.length||input.content.length%4!==0||!/^[A-Za-z0-9+/]*={0,2}$/.test(input.content)) throw fail(400,'INVALID_FILE','文档编码无效。');
           const {content,...rest}=input;
-          return json(res,201,business.uploadDocument(actor,id,{...rest,contentBuffer:Buffer.from(content,'base64')}));
+          return json(res,201,business.uploadDocument(actor,id,{...rest,contentBuffer:decodeBase64(content,'文档')}));
         }
       }
       if((match=endpoint.match(/^\/api\/documents\/([^/]+)\/versions$/)) && method==='GET') return json(res,200,{versions:business.listDocumentVersions(actor,param(match[1]))});
@@ -193,7 +197,7 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
       const status=Number.isInteger(error.status) && error.status>=400&&error.status<600?error.status:500;
       if(status===500) logger.error(JSON.stringify({requestId,error:'INTERNAL_ERROR',type:error.name}));
       if(!res.headersSent) json(res,status,{error:status===500?'服务器处理失败，请联系管理员并提供请求编号。':error.message,code:status===500?'INTERNAL_ERROR':(error.code||'REQUEST_FAILED'),requestId,...(status!==500&&error.details?{details:error.details}:{})});
-      else res.end();
+      else if(!res.writableEnded) res.end();
     } finally {
       logger.info(JSON.stringify({requestId,method:req.method,path:endpoint,status:res.statusCode,durationMs:Date.now()-started}));
     }

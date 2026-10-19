@@ -1,9 +1,9 @@
 import { markdownMode, headingCode } from './doc-sections.js';
+import { esc } from './ui-kit.js';
 
 // A deliberately small document reader, not a complete Markdown implementation.
 // Raw HTML is always text; only markup assembled here reaches the document.
 const MAX_CHARACTERS=200000,MAX_LINES=4000,MAX_OUTPUT=1000000,MAX_HEADINGS=200;
-const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const indent=line=>(/^\s*/.exec(line)?.[0]||'').replace(/\t/g,'    ').length;
 function removeIndent(line,count) {
   let index=0,width=0;while(index<line.length&&width<count&&/[ \t]/.test(line[index])){width+=line[index]==='\t'?4:1;index++;}return line.slice(index);
@@ -14,23 +14,23 @@ function safeLink(raw) {
   try {const url=new URL(value);return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:null;}catch{return null;}
 }
 function inline(source,state,depth=0,links=true) {
-  if(depth>5)return escape(source);
+  if(depth>5)return esc(source);
   let output='',position=0,steps=0;
   while(position<source.length) {
-    if(++steps>10000){state.notices.add('复杂格式超过处理限制，剩余部分按原文显示。');output+=escape(source.slice(position));break;}
+    if(++steps>10000){state.notices.add('复杂格式超过处理限制，剩余部分按原文显示。');output+=esc(source.slice(position));break;}
     const rest=source.slice(position);let match;
-    if(rest[0]==='\\'&&rest.length>1&&/[\\`*_[\]{}()#+.!|>-]/.test(rest[1])){output+=escape(rest[1]);position+=2;continue;}
+    if(rest[0]==='\\'&&rest.length>1&&/[\\`*_[\]{}()#+.!|>-]/.test(rest[1])){output+=esc(rest[1]);position+=2;continue;}
     if(rest[0]==='`') {
       const fence=/^`+/.exec(rest)[0];const end=source.indexOf(fence,position+fence.length);
-      if(end>=0){output+=`<code>${escape(source.slice(position+fence.length,end))}</code>`;position=end+fence.length;continue;}
-      output+=escape(fence);position+=fence.length;continue;
+      if(end>=0){output+=`<code>${esc(source.slice(position+fence.length,end))}</code>`;position=end+fence.length;continue;}
+      output+=esc(fence);position+=fence.length;continue;
     }
     if((match=/^!\[([^\]\n]{0,500})\]\(([^)\n]{0,2000})\)/.exec(rest))) {
-      output+=`<span class="document-image">[图片：${escape(match[1]||'未命名图片')}；预览不加载图片]</span>`;position+=match[0].length;continue;
+      output+=`<span class="document-image">[图片：${esc(match[1]||'未命名图片')}；预览不加载图片]</span>`;position+=match[0].length;continue;
     }
     if(links&&(match=/^\[([^\]\n]{1,500})\]\(([^)\n]{1,2000})\)/.exec(rest))) {
       const href=safeLink(match[2]),label=inline(match[1],state,depth+1,false);
-      output+=href?`<a href="${escape(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`:`<span class="document-inactive-link">${label}（链接未启用）</span>`;
+      output+=href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${label}</a>`:`<span class="document-inactive-link">${label}（链接未启用）</span>`;
       position+=match[0].length;continue;
     }
     const strong=rest.startsWith('**')?'**':rest.startsWith('__')?'__':null;
@@ -38,7 +38,7 @@ function inline(source,state,depth=0,links=true) {
     // Consume ordinary text together, keeping malformed input processing linear
     // apart from bounded 500-character label / 2000-character URL scans.
     const ordinary=/^[^\\`!\[*_]+/.exec(rest)?.[0];
-    if(ordinary){output+=escape(ordinary);position+=ordinary.length;}else{output+=escape(rest[0]);position++;}
+    if(ordinary){output+=esc(ordinary);position+=ordinary.length;}else{output+=esc(rest[0]);position++;}
   }
   return output;
 }
@@ -59,7 +59,7 @@ const divider=line=>tableCells(line).every(cell=>/^:?-{3,}:?$/.test(cell));
 const startsBlock=line=>Boolean(headingMatch(line)||fenceMatch(line)||listMatch(line)||/^ {0,3}>/.test(line));
 function headingText(value){return value.replace(/!\[([^\]]*)\]\([^)]*\)/g,'图片：$1').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/[`*_]/g,'').slice(0,160);}
 function blocks(lines,state,depth=0) {
-  if(depth>8){state.notices.add('缩进或引用超过 8 层，深层内容按原文显示。');return `<pre>${escape(lines.join('\n'))}</pre>`;}
+  if(depth>8){state.notices.add('缩进或引用超过 8 层，深层内容按原文显示。');return `<pre>${esc(lines.join('\n'))}</pre>`;}
   const output=[];let index=0;
   while(index<lines.length) {
     const line=lines[index];if(!line.trim()){index++;continue;}
@@ -68,13 +68,13 @@ function blocks(lines,state,depth=0) {
       const fence=match[1],label=match[2].trim().slice(0,80),content=[];index++;
       const closing=new RegExp(`^ {0,3}${fence[0]}{${fence.length},}\\s*$`);
       while(index<lines.length&&!closing.test(lines[index]))content.push(lines[index++]);if(index<lines.length)index++;
-      output.push(`<div class="document-code">${label?`<p class="document-code-label">${escape(label)}</p>`:''}<pre><code>${escape(content.join('\n'))}</code></pre></div>`);continue;
+      output.push(`<div class="document-code">${label?`<p class="document-code-label">${esc(label)}</p>`:''}<pre><code>${esc(content.join('\n'))}</code></pre></div>`);continue;
     }
     if((match=headingMatch(line))) {
       const level=match[1].length,title=match[2].replace(/\s+#+\s*$/,'');const id=`doc-heading-${++state.headingCount}`;
       if(state.headings.length<MAX_HEADINGS)state.headings.push({level,id,title:headingText(title)});else state.notices.add('目录仅列出前 200 个标题，正文仍可继续阅读。');
       const section=headingCode(title,state.mode);
-      output.push(`<h${level} id="${id}" tabindex="-1"${section?` data-section="${escape(section)}"`:''}>${inline(title,state)}</h${level}>`);index++;continue;
+      output.push(`<h${level} id="${id}" tabindex="-1"${section?` data-section="${esc(section)}"`:''}>${inline(title,state)}</h${level}>`);index++;continue;
     }
     if(/^ {0,3}>/.test(line)) {
       const quote=[];while(index<lines.length&&/^ {0,3}>/.test(lines[index]))quote.push(lines[index++].replace(/^ {0,3}>[ \t]?/,''));
@@ -113,8 +113,8 @@ function blocks(lines,state,depth=0) {
 function compose(source,limited,options={}) {
   const state={headings:[],headingCount:0,notices:new Set(),mode:options.mode||'numbered'};const body=blocks(source.split('\n'),state);
   if(limited)state.notices.add('文档较长，当前仅展示部分内容。预览最多处理 20 万字符、4000 行，生成内容最多 100 万字符；请下载原文件查看全文。');
-  const notices=[...state.notices].map(text=>`<p class="document-preview-notice" role="note">${escape(text)}</p>`).join('');
-  const toc=options.toc!==false&&state.headings.length?`<nav class="document-toc" aria-label="文档目录"><h2>文档目录</h2><ol>${state.headings.map(heading=>`<li class="document-toc-level-${heading.level}"><button type="button" data-document-anchor="${heading.id}">${escape(heading.title||'未命名标题')}</button></li>`).join('')}</ol></nav>`:'';
+  const notices=[...state.notices].map(text=>`<p class="document-preview-notice" role="note">${esc(text)}</p>`).join('');
+  const toc=options.toc!==false&&state.headings.length?`<nav class="document-toc" aria-label="文档目录"><h2>文档目录</h2><ol>${state.headings.map(heading=>`<li class="document-toc-level-${heading.level}"><button type="button" data-document-anchor="${heading.id}">${esc(heading.title||'未命名标题')}</button></li>`).join('')}</ol></nav>`:'';
   return `<div class="document-preview">${notices}${toc}<div class="document-body">${body||'<p>文档为空。</p>'}</div></div>`;
 }
 
@@ -145,6 +145,6 @@ export function renderFeaturePreview(text) {
     (current?current.steps:intro).push(line);
   }
   const trim=list=>list.join('\n').replace(/^\n+|\s+$/g,'');
-  const card=item=>`<article class="feature-scenario" data-section="${escape(item.code)}" tabindex="-1"><header><code>${escape(item.code)}</code><strong>${escape(item.title)}</strong></header>${item.tags.length?`<p class="feature-tags">${item.tags.map(tag=>`<span>${escape(tag)}</span>`).join('')}</p>`:''}<pre>${escape(trim(item.steps.map(step=>step.replace(/^ {4}/,''))))}</pre></article>`;
-  return `<div class="document-preview"><div class="document-body feature-body">${trim(intro)?`<pre class="feature-intro">${escape(trim(intro))}</pre>`:''}${cards.map(card).join('')||'<p>没有识别到验收用例。</p>'}</div></div>`;
+  const card=item=>`<article class="feature-scenario" data-section="${esc(item.code)}" tabindex="-1"><header><code>${esc(item.code)}</code><strong>${esc(item.title)}</strong></header>${item.tags.length?`<p class="feature-tags">${item.tags.map(tag=>`<span>${esc(tag)}</span>`).join('')}</p>`:''}<pre>${esc(trim(item.steps.map(step=>step.replace(/^ {4}/,''))))}</pre></article>`;
+  return `<div class="document-preview"><div class="document-body feature-body">${trim(intro)?`<pre class="feature-intro">${esc(trim(intro))}</pre>`:''}${cards.map(card).join('')||'<p>没有识别到验收用例。</p>'}</div></div>`;
 }
