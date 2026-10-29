@@ -7,6 +7,7 @@ import {createAuth} from './auth.mjs';
 import {createBusiness} from './business.mjs';
 import {createProposalService} from './proposals.mjs';
 import {createWorkService} from './work-service.mjs';
+import {reconcileDeliveryWorkflow} from './delivery-migration.mjs';
 import {startBackupService} from './scripts/backup-service.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,9 @@ export function createApplication({db,publicOrigin='http://127.0.0.1:3000',secur
   const proposals=createProposalService(db,business);
   const work=createWorkService(db,business);
   if(setupToken && !/^[A-Za-z0-9_-]{43}$/.test(setupToken)) throw new Error('初始化凭证必须是 32 字节随机值的安全编码。');
+  // Upgrade existing records before the first request; reads remain side-effect free.
+  const deliveryMigration=reconcileDeliveryWorkflow(db);
+  if(deliveryMigration.updated) logger.info(JSON.stringify({event:'delivery_workflow_migration',...deliveryMigration}));
   let setupHash=setupToken?createHash('sha256').update(setupToken).digest():null;
   const setupExpiresAt=now()+setupTtlMs;
   const needsSetup=()=>!db.prepare("SELECT 1 FROM users WHERE role='admin' LIMIT 1").get();

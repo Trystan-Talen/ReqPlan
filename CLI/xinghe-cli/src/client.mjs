@@ -8,8 +8,7 @@ export function normalizeUrl(value) {
   let url;
   try { url=new URL(value); } catch { fail('INVALID_URL','请输入完整的平台地址。'); }
   if (url.username || url.password || url.search || url.hash || !['http:','https:'].includes(url.protocol)) fail('INVALID_URL','地址不可含账号、密码、查询参数或片段。');
-  // TEMP: allow http for remote IP (user's own server)
-  // if (url.protocol==='http:' && !['localhost','127.0.0.1','[::1]'].includes(url.hostname)) fail('HTTPS_REQUIRED','非本机地址必须使用 HTTPS（加密连接）。');
+  if (url.protocol==='http:' && !['localhost','127.0.0.1','[::1]'].includes(url.hostname)) fail('HTTPS_REQUIRED','非本机地址必须使用 HTTPS（加密连接）。');
   url.pathname=url.pathname.replace(/\/+$/,'')+'/';
   return url.href.replace(/\/$/,'');
 }
@@ -20,7 +19,14 @@ export class Store {
     try {
       const stat=await fs.lstat(file);
       if (!stat.isFile() || stat.isSymbolicLink()) fail('UNSAFE_CONFIG','配置文件必须是普通文件。');
-      return JSON.parse(await fs.readFile(file,'utf8'));
+      const text=await fs.readFile(file,'utf8');
+      let value;
+      try {
+        value=JSON.parse(text);
+      }
+      catch(error) { fail('INVALID_CONFIG','配置文件不是有效的 JSON。',{cause:error}); }
+      if(!value || typeof value!=='object' || Array.isArray(value)) fail('INVALID_CONFIG','配置文件必须是 JSON 对象。');
+      return value;
     } catch(error) { if(error.code==='ENOENT') return fallback; throw error; }
   }
   async write(name,value) {
@@ -39,13 +45,17 @@ export class Store {
 }
 export class Client {
   constructor({url,profile='default',store=new Store(),fetchImpl=fetch}) { Object.assign(this,{url:normalizeUrl(url),profile,store,fetchImpl}); }
+  async readSession({requireCsrf=true}={}) {
+    const session=await this.store.session(this.profile,this.url);
+    if(!session || session.url!==this.url || !Number.isFinite(Date.parse(session.expiresAt)) || Date.parse(session.expiresAt)<=Date.now()) fail('LOGIN_REQUIRED','此环境尚未登录或会话已过期，请执行 auth login（账号登录）。');
+    if(!/^xinghe_session=[A-Za-z0-9_-]+$/.test(session.cookie) || (requireCsrf && !/^[a-f0-9]{64}$/.test(session.csrfToken))) fail('INVALID_SESSION','本地登录凭证无效，请重新登录。');
+    return session;
+  }
   async request(endpoint,{method='GET',body,authenticated=true}={}) {
-    const headers={Accept:'application/json','User-Agent':'xinghe-cli/0.3.0'};
+    const headers={Accept:'application/json','User-Agent':'xinghe-cli/0.4.0'};
     if(body!==undefined) headers['Content-Type']='application/json';
     if(authenticated) {
-      const s=await this.store.session(this.profile,this.url);
-      if(!s || s.url!==this.url || !Number.isFinite(Date.parse(s.expiresAt)) || Date.parse(s.expiresAt)<=Date.now()) fail('LOGIN_REQUIRED','此环境尚未登录或会话已过期，请执行 auth login（账号登录）。');
-      if(!/^xinghe_session=[A-Za-z0-9_-]+$/.test(s.cookie) || !/^[a-f0-9]{64}$/.test(s.csrfToken)) fail('INVALID_SESSION','本地登录凭证无效，请重新登录。');
+      const s=await this.readSession();
       headers.Cookie=s.cookie;
       if(method!=='GET') headers['X-CSRF-Token']=s.csrfToken;
     }
@@ -58,17 +68,15 @@ export class Client {
     try { data=await response.json(); } catch { fail('INVALID_RESPONSE','平台未返回有效的结构化结果，请核对地址；写操作结果需在平台核对。'); }
     if(!response.ok) {
       if(response.status===401 && authenticated) await this.store.clearSession(this.profile,this.url);
-      fail(data.code || 'HTTP_ERROR',data.error || '平台请求失败。',{status:response.status,requestId:data.requestId});
+      fail(data.code || 'HTTP_ERROR',data.error || '平台请求失败。',{status:response.status,requestId:data.requestId,details:data.details});
     }
     return {data,response};
   }
   // Document content is returned as a file, not JSON.
   async download(endpoint) {
-    const s=await this.store.session(this.profile,this.url);
-    if(!s || s.url!==this.url || !Number.isFinite(Date.parse(s.expiresAt)) || Date.parse(s.expiresAt)<=Date.now()) fail('LOGIN_REQUIRED','此环境尚未登录或会话已过期，请执行 auth login（账号登录）。');
-    if(!/^xinghe_session=[A-Za-z0-9_-]+$/.test(s.cookie)) fail('INVALID_SESSION','本地登录凭证无效，请重新登录。');
+    const s=await this.readSession({requireCsrf:false});
     let response;
-    try { response=await this.fetchImpl(this.url+endpoint,{method:'GET',headers:{Accept:'*/*','User-Agent':'xinghe-cli/0.3.0',Cookie:s.cookie},redirect:'manual',signal:AbortSignal.timeout(20_000)}); }
+    try { response=await this.fetchImpl(this.url+endpoint,{method:'GET',headers:{Accept:'*/*','User-Agent':'xinghe-cli/0.4.0',Cookie:s.cookie},redirect:'manual',signal:AbortSignal.timeout(20_000)}); }
     catch { fail('NETWORK_ERROR','无法连接平台，请检查地址及服务状态。'); }
     if(response.status>=300 && response.status<400) fail('REDIRECT_BLOCKED','平台返回重定向；请配置最终地址。凭证不会转发到其他地址。');
     if(!response.ok) {

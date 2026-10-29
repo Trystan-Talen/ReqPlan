@@ -5,6 +5,8 @@
    ========================================================================== */
 
 .schedule-workspace { display: grid; gap: var(--gap-block); }
+/* 里程碑图形沿用原布局；手机另提供可展开的完整名称与日期。 */
+.schedule-workspace .schedule-mobile-milestones { display: none; }
 
 /* ---------- Controls ---------- */
 .schedule-controls { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-3); flex-wrap: wrap; padding: 14px var(--space-4); border-bottom: 1px solid var(--border); }
@@ -155,8 +157,55 @@
   .schedule-chart { --name-w: 160px; }
 }
 @media (max-width: 560px) {
+  /* 原生下拉框按最长选项计算宽度，项目长名称也必须收缩在筛选区内。 */
+  .schedule-filters { min-width: 0; max-width: 100%; }
+  .schedule-filters label { min-width: 0; max-width: 100%; }
+  .schedule-filters label > span { flex: none; }
+  .schedule-filters select { min-width: 0; max-width: 100%; }
   .schedule-navigation { width: 100%; }
   .schedule-jump { flex: 1; }
   .schedule-jump span { display: none; }
   .schedule-jump input { width: 100%; }
+}
+
+
+/* 只改善项目交付排期的手机阅读与触摸；全局排期复用的图表组件不受影响。 */
+@media (max-width: 560px) {
+  .schedule-workspace { min-width: 0; }
+  .schedule-workspace .schedule-zoom button,
+  .schedule-workspace .schedule-modes button,
+  .schedule-workspace .schedule-navigation > button { min-width: 44px; min-height: 44px; height: 44px; }
+  .schedule-workspace .schedule-filters select,
+  .schedule-workspace .schedule-jump input,
+  .schedule-workspace .schedule-custom input { min-height: 44px; height: 44px; }
+  .schedule-workspace .schedule-reset { min-height: 44px; }
+  .schedule-workspace .schedule-navigation { flex-wrap: wrap; }
+  .schedule-workspace .schedule-jump { flex: 1 0 100%; min-width: 0; margin-right: 0; }
+  .schedule-workspace .schedule-jump span { display: inline; }
+  .schedule-workspace .schedule-jump input { min-width: 0; flex: 1; width: auto; }
+  .schedule-workspace .schedule-custom { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .schedule-workspace .schedule-custom > span { display: none; }
+  .schedule-workspace .schedule-custom label,
+  .schedule-workspace .schedule-custom input { min-width: 0; width: 100%; }
+  .schedule-workspace .schedule-range-copy { min-width: 0; max-width: 100%; }
+  .schedule-workspace .schedule-range-copy h2 { display: flex; align-items: baseline; flex-wrap: wrap; }
+  .schedule-workspace time { white-space: nowrap; overflow-wrap: normal; }
+  .schedule-workspace .schedule-metric p { font-size: var(--text-sm); line-height: 1.5; color: var(--text-2); white-space: normal; overflow: visible; text-overflow: clip; }
+  .schedule-workspace .schedule-name small { flex-wrap: wrap; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .schedule-workspace .schedule-task-name { min-height: 44px; min-width: 0; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .schedule-workspace .schedule-table th:first-child,
+  .schedule-workspace .schedule-table td:first-child { width: 240px; min-width: 240px; max-width: 240px; white-space: normal; }
+  .schedule-workspace .schedule-table td:first-child .schedule-task-name { width: 100%; }
+  .schedule-workspace .schedule-table td { font-size: var(--text-sm); }
+  .schedule-workspace .schedule-date-hint { display: block; width: fit-content; margin-left: 0; }
+  .schedule-workspace .schedule-mobile-milestones { display: block; padding: 0 18px var(--space-3); border-top: 1px solid var(--border); }
+  .schedule-workspace .schedule-mobile-milestones > summary { min-height: 44px; padding: var(--space-3) 0; font-size: var(--text-sm); font-weight: 600; color: var(--text-2); cursor: pointer; }
+  .schedule-workspace .schedule-mobile-milestones > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+  .schedule-workspace .schedule-mobile-milestones ul { display: grid; gap: var(--space-3); padding: 0; list-style: none; }
+  .schedule-workspace .schedule-mobile-milestones li { display: grid; gap: var(--space-1); min-width: 0; }
+  .schedule-workspace .schedule-mobile-milestones strong { font-size: var(--text-base); font-weight: 560; overflow-wrap: anywhere; }
+  .schedule-workspace .schedule-mobile-milestones time { font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--text-2); }
+  #schedule-batch-form .batch-task { min-width: 0; }
+  #schedule-batch-form .batch-task legend { max-width: 100%; overflow-wrap: anywhere; }
+  #schedule-batch-form input[type="date"] { min-width: 0; min-height: 44px; }
 }

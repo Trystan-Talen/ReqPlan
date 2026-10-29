@@ -17,22 +17,30 @@ const HELP=`星河命令行工具 — 默认输出 JSON（结构化数据）
   xinghe project list
   xinghe project get <编号>
   xinghe project members <编号>
+  xinghe proposal list --project <项目编号>
+  xinghe proposal get|history <编号>
+  xinghe proposal create --project <编号> --title <标题> [--data-file 文件]
+  xinghe proposal import --project <编号> --data-file 提议数组.json [--dry-run]
+  xinghe proposal update|approve <编号> --version <版本号> [--data-file 文件]
   xinghe requirement list --project <项目编号> [--assignee 主责开发编号] [--query 关键词]
   xinghe requirement get <编号>
   xinghe requirement history <编号>
   xinghe requirement create --project <编号> --title <标题> [--data-file 文件]
-  xinghe requirement import --project <编号> --data-file 需求数组.json [--dry-run]   （批量导入，按标题去重，可安全重跑）
+  xinghe requirement import --project <编号> --data-file 需求数组.json [--dry-run]   （同名跳过，不保证并发去重）
   xinghe requirement update <编号> --version <版本号> --data-file 文件
   xinghe requirement schedule <编号> --version <版本号> --start YYYY-MM-DD --end YYYY-MM-DD
   xinghe requirement archive|restore <编号> --version <版本号>
+  xinghe requirement return <编号> --version <版本号> --reason <原因> --data-file 返工任务.json
+  xinghe requirement reopen <编号> --version <版本号> --reason <原因>
   xinghe task list --project <项目编号>
   xinghe task get <编号>
+  xinghe task history <编号>
   xinghe task create --project <编号> --requirement <需求编号> --title <标题>
   xinghe task update <编号> --version <版本号> --data-file 文件
   xinghe task schedule <编号> --version <版本号> --start YYYY-MM-DD --end YYYY-MM-DD
   xinghe task batch --requirement <需求编号> --version <需求版本号> --data-file 任务数组.json [--request-id 提交编号]
   xinghe task archive|restore <编号> --version <版本号>
-  xinghe schedule list [--project <编号>] [--kind task|requirement] [--from YYYY-MM-DD --to YYYY-MM-DD]
+  xinghe schedule list [--project <编号>] [--kind task|requirement] [--basis development|commitment] [--from YYYY-MM-DD --to YYYY-MM-DD]
   xinghe schedule preview --project <编号> --data-file 改期.json
   xinghe schedule apply --project <编号> --data-file 改期.json --token <预览令牌> --reason <原因> [--force]
   xinghe document list --project <编号>
@@ -42,7 +50,8 @@ const HELP=`星河命令行工具 — 默认输出 JSON（结构化数据）
   xinghe document upload --project <编号> --document <文档编号> --file 路径 [--note 说明]   （上传新版本）
   xinghe work [--date YYYY-MM-DD]   （我的工作与站内提醒）
   xinghe plan preview --project <编号> --data-file 计划.json   （按日历与产能自动排期，不写入）
-  xinghe plan apply --project <编号> --data-file 计划.json [--force]   （批量建任务并给需求排期）
+  xinghe plan apply --project <编号> --data-file 计划.json [--force]   （建任务、设主责，保留需求承诺日期）
+  xinghe --version
   xinghe schema
 
 全局参数：--profile 环境名（默认 default）；--url 地址（仅本次覆盖）
@@ -50,27 +59,32 @@ const HELP=`星河命令行工具 — 默认输出 JSON（结构化数据）
 读取参数：--project、--owner、--status、--query、--include-archived
 写入参数：--title、--description、--owner、--status、--priority、--hours、--points
 写入文件：--data-file 文件或 -（标准输入）；--data JSON字符串；二者不能同时使用。
---dry-run 仅输出请求预览，不发送请求、不代表后端校验通过。
+--dry-run 只读预览，不写入；批量导入会查询项目和文档，不代表后端校验通过。
+proposal（提议）用于待评估内容；requirement（需求）直接创建已确认需求，必须提供背景和验收标准。
+研发阶段由任务自动同步；需求验收、退回、重开仍须人工操作。
 登录默认终端隐藏输入；自动化可用 --password-stdin 从安全输入通道读取。
 修改必须使用刚查询的 version（版本号），冲突不会自动覆盖。创建不会自动重试；task batch 可用同一 --request-id 安全重试。
 schema（字段说明）列出高级字段；--help 查看帮助。`;
 const SCHEMA={
-  requirement:{create:['projectId','title','description','acceptance','source','priority','ownerId','assigneeId','collaboratorIds','planStart','planEnd','estimatePoints','dependencyIds','docRefs','acceptanceCases'],update:['version','title','description','acceptance','source','status','priority','ownerId','assigneeId','collaboratorIds','planStart','planEnd','estimatePoints','dependencyIds','docRefs','acceptanceCases','reason','force'],
+  proposal:{create:['projectId','title','description','acceptance','source','priority','proposerName','docRefs','acceptanceCases'],update:['version','title','description','acceptance','source','priority','proposerName','docRefs','acceptanceCases','status','decisionReason'],approve:['version','title','description','acceptance','source','priority','proposerName','docRefs','acceptanceCases','decisionReason','ownerId'],statuses:['待评估','评估中','待补充','暂缓','不采纳','已转需求'],notes:'项目成员可提出提议；产品经理或管理员评估并 approve（确认转需求）。确认时背景与验收标准必填，返回关联需求。历史早期需求也在此评估，保留原编号和关联。'},
+  requirement:{create:['projectId','title','description','acceptance','source','status','priority','ownerId','assigneeId','collaboratorIds','planStart','planEnd','estimatePoints','dependencyIds','docRefs','acceptanceCases'],update:['version','title','description','acceptance','source','status','priority','ownerId','assigneeId','collaboratorIds','planStart','planEnd','estimatePoints','dependencyIds','docRefs','acceptanceCases','reason','force'],
     docRefs:'[{"document":"文档文件名","type":"PRD|原型|技术方案|验收用例|其他","sections":["章节编号"]}]；PRD 章节编号取标题里的〔编号〕，技术方案取 §n.n，验收用例取每个 Scenario 的第一个 @标签。acceptanceCases 为验收用例编号列表。只有产品经理和管理员能修改。',
     statuses:['未确定','待评审','已确定','待排期','已排期','开发中','测试中','已完成','已终止'],
-    notes:'需求由产品经理创建，从「未确定」开始：未确定 → 待评审 → 已确定 →（主开发拆分任务、指定主责开发）→ 已排期 → 开发中 → 测试中 → 已完成。assigneeId（主责开发）由主开发指定；dependencyIds 为同项目的前置需求，未完成时不能开工。force 仅在计划超出项目目标日期时确认使用。docRefs（关联文档章节）只读。'},
+    notes:'产品经理或管理员直接创建「已确定」需求，description（背景与目标）和 acceptance（验收标准）必填。历史「未确定 / 待评审」通过 proposal（提议）评估。研发阶段按任务自动同步，不手动推进。assigneeId（主责开发）由主开发指定；dependencyIds（前置需求）未完成时不能开工。planStart / planEnd（承诺起止日期）独立保留，任务日期表示研发周期。docRefs（文档关联）可由产品经理和管理员修改；sections（章节）为空表示全文。验收、退回、重开由产品经理、主开发、测试或管理员处理。'},
+  requirementActions:{return:{fields:['version','reason','taskIds'],notes:'退回测试中的需求，选择至少一个测试中或已完成任务返工。'},reopen:{fields:['version','reason'],notes:'重新打开已完成或已终止的需求。'}},
   task:{create:['projectId','requirementId','title','description','ownerId','startDate','dueDate','estimateHours','estimatePoints','dependencyIds'],update:['version','requirementId','title','description','ownerId','status','startDate','dueDate','estimateHours','estimatePoints','dependencyIds','reason'],
     statuses:['wait（待开始）','develop（开发中）','test（测试中）','done（已完成）','terminated（已终止）'],
     notes:'任务必须关联需求。主开发可给任何成员派任务；开发只能给自己建任务。新任务从待开始创建；不能验收自己负责的任务（主开发的纯技术任务除外）。日期采用 YYYY-MM-DD。'},
   taskBatch:{file:'任务对象数组，或 {"tasks":[…]}；每项字段同 task.create（projectId、requirementId 可省略），1 至 100 条，整包校验、要么全部创建要么不创建。',requestId:'同一 --request-id 重复提交返回首次结果，不会重复创建。'},
   scheduleChanges:{file:'改期数组，或 {"changes":[…]}；每项 {requirementId, version, planStart, planEnd}，1 至 100 条。',flow:'先 schedule preview 取得 previewToken，再用同一文件 schedule apply；超出项目目标日期需加 --force。'},
-  requirementImport:{file:'需求对象数组，或 {"requirements":[…]}；字段同 requirement.create（projectId 可省略），可加 key 作为本地标识。',behavior:'按标题去重：同项目已有同名未归档需求时跳过并返回其编号，因此可以安全重跑。新需求一律从「未确定」开始。会检查 docRefs 引用的文档与章节是否存在于已上传文档。'},
+  requirementImport:{file:'需求对象数组，或 {"requirements":[…]}；字段同 requirement.create（projectId 可省略），可加 key 作为本地标识。',behavior:'直接创建已确定需求，背景和验收标准必填。按标题跳过已有未归档需求；只做客户端查重，不保证并发幂等。先预览并核对关联文档。'},
+  proposalImport:{file:'提议对象数组，或 {"proposals":[…]}；字段同 proposal.create，可加 key（本地标识）。',behavior:'创建待评估提议，按标题跳过已有提议；确认需求使用 proposal approve（确认转需求），不会自动确认。'},
   plan:{file:'{startDate, capacityHours, capacityOverrides?, holidays?, extraWorkdays?, acceptanceBufferDays?(默认 1), phases?, phaseDeadlines?, owners?, respectExistingLoad?(默认 true), tasks:[{requirement:需求编号, owner:用户名|成员编号|owners 别名, phase?, hours, title, desc?, after?:[前置任务标题]}]}',
-    behavior:'按阶段顺序与文件顺序把任务依次放进负责人的工作日历；默认接在负责人已有未完成任务之后。需求计划日期 = 任务最早开始 ～ 最晚结束 + 验收缓冲；主责开发 = 工时最多的人。apply 需要主开发或管理员账号；已有其他任务的需求跳过；同一计划重跑不会重复创建。计划结束晚于项目目标日期时必须加 --force。'},
+    behavior:'按阶段与文件顺序安排任务，默认接在已有未完成工作之后。apply（应用）需要主开发或管理员，只接受已确认且未结束需求；建任务并设置主责协作，由后端同步阶段。建议交付日期含验收缓冲，仅供参考，不写入需求承诺日期或基线。已有任务跳过；重跑不覆盖人工改动。晚于项目目标或已有承诺时需 --force（接受延期）。after（前置任务标题）只约束本次日期计算，不创建服务端任务依赖。'},
   notes:'数组、数字、布尔值请用结构化数据文件；成员编号通过 project members 查询。最终校验由后端负责。'
 };
 const FLAGS=new Set(['help','include-archived','dry-run','password-stdin','force','primary']);
-const VALUES=new Set(['profile','url','username','project','owner','assignee','status','query','from','to','title','description','priority','requirement','hours','points','version','start','end','data-file','data','request-id','token','reason','kind','doc-version','output','file','type','note','document','date']);
+const VALUES=new Set(['profile','url','username','project','owner','assignee','status','query','from','to','title','description','acceptance','proposer','decision-reason','priority','requirement','hours','points','version','start','end','data-file','data','request-id','token','reason','kind','basis','doc-version','output','file','type','note','document','date']);
 export function parse(args) {
   const opts=Object.create(null),pos=[];
   for(let i=0;i<args.length;i++) {
@@ -129,12 +143,13 @@ async function payload(opts) {
     try {value=JSON.parse(source);} catch {fail('INVALID_JSON','输入文件不是有效的结构化数据。');}
     if(!value || typeof value!=='object' || Array.isArray(value)) fail('INVALID_JSON','输入内容必须是对象。');
   }
-  const map={project:'projectId',requirement:'requirementId',owner:'ownerId',title:'title',description:'description',status:'status',priority:'priority',hours:'estimateHours',points:'estimatePoints',version:'version'};
+  const map={project:'projectId',requirement:'requirementId',owner:'ownerId',assignee:'assigneeId',title:'title',description:'description',acceptance:'acceptance',proposer:'proposerName','decision-reason':'decisionReason',reason:'reason',status:'status',priority:'priority',hours:'estimateHours',points:'estimatePoints',version:'version'};
   for(const [flag,key] of Object.entries(map)) if(opts[flag]!==undefined) {
     if(Object.hasOwn(value,key)) fail('USAGE',`文件与参数重复指定字段：${key}`);
     value[key]=['hours','points','version'].includes(flag)?Number(opts[flag]):opts[flag];
     if(['hours','points','version'].includes(flag) && (!opts[flag].trim() || !Number.isFinite(value[key]) || value[key]<0)) fail('USAGE',`--${flag} 必须是有效非负数字。`);
   }
+  if(opts.force) {if(Object.hasOwn(value,'force')) fail('USAGE','文件与参数重复指定字段：force');value.force=true;}
   return value;
 }
 async function listPayload(opts,key) {
@@ -156,6 +171,7 @@ async function objectPayload(opts) {
   fail('INVALID_JSON','输入内容必须是结构化数据对象。');
 }
 export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader=readPassword,env=process.env}={}) {
+  if(args.length===1 && ['--version','-v'].includes(args[0])) return '0.4.0';
   const {opts,pos}=parse(args);
   if(opts.help || !pos.length) return HELP;
   const [group,action,id]=pos;
@@ -192,17 +208,26 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
     if(action==='logout') return result(await client.logout());
     fail('USAGE','未知账号命令。');
   }
-  const plural={project:'projects',requirement:'requirements',task:'tasks'}[group];
+  const plural={project:'projects',proposal:'proposals',requirement:'requirements',task:'tasks'}[group];
   if((plural || group==='schedule') && action==='list' && pos.length===2) {
-    allowed(opts,['project','owner','status','query','include-archived',...(group==='requirement'?['assignee']:[]),...(group==='schedule'?['from','to','kind']:[])]);
+    allowed(opts,['project','owner','status','query','include-archived',...(group==='requirement'?['assignee']:[]),...(group==='schedule'?['from','to','kind','basis']:[])]);
     if(opts.kind && !['task','requirement'].includes(opts.kind)) fail('USAGE','--kind 只能是 task 或 requirement。');
+    if(opts.basis && ((opts.kind || 'task')!=='requirement' || !['development','commitment'].includes(opts.basis))) fail('USAGE','--basis 仅用于需求排期，取 development（研发）或 commitment（承诺）。');
     if(opts.project) identifier(opts.project);
     if(opts.from) date(opts.from);if(opts.to) date(opts.to);
     if(opts.from && opts.to && opts.from>opts.to) fail('USAGE','开始日期不能晚于结束日期。');
     const {data}=await client.request('/api/bootstrap'+(opts['include-archived']?'?includeArchived=1':''));
     const kind=group==='schedule'?(opts.kind || 'task'):null;
     let items=data[plural || (kind==='requirement'?'requirements':'tasks')];
-    if(kind==='requirement') items=items.map(x=>({...x,startDate:x.planStart,dueDate:x.planEnd}));
+    if(group==='requirement' || kind==='requirement') items=items.filter(x=>!['未确定','待评审'].includes(x.status));
+    if(kind==='requirement') items=items.map(x=>{
+      const valid=value=>{try{return date(value);}catch{return '';}};
+      const tasks=(data.tasks || []).filter(task=>task.requirementId===x.id && !task.archived && !['terminated','已终止'].includes(task.status));
+      const dates=tasks.map(task=>({start:valid(task.startDate),end:valid(task.dueDate)})).filter(task=>!task.start || !task.end || task.start<=task.end);
+      const developmentStart=dates.map(task=>task.start).filter(Boolean).sort()[0] || '',developmentEnd=dates.map(task=>task.end).filter(Boolean).sort().at(-1) || '';
+      const useTasks=opts.basis!=='commitment' && Boolean(developmentStart || developmentEnd);
+      return {...x,developmentStart,developmentEnd,commitmentStart:x.planStart || '',commitmentEnd:x.planEnd || '',dateSource:useTasks?'tasks':'commitment',startDate:useTasks?developmentStart:x.planStart,dueDate:useTasks?developmentEnd:x.planEnd};
+    });
     if(opts.project) items=items.filter(x=>group==='project'?x.id===opts.project:x.projectId===opts.project);
     if(opts.owner) items=items.filter(x=>x.ownerId===opts.owner);
     if(opts.assignee) items=items.filter(x=>x.assigneeId===opts.assignee);
@@ -211,14 +236,28 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
     if(group==='schedule') {
       const unscheduled=items.filter(x=>!x.startDate || !x.dueDate || x.startDate>x.dueDate);
       items=items.filter(x=>x.startDate && x.dueDate && x.startDate<=x.dueDate && (!opts.from || x.dueDate>=opts.from) && (!opts.to || x.startDate<=opts.to)).sort((a,b)=>a.startDate.localeCompare(b.startDate));
-      return result({kind,items,count:items.length,unscheduled,note:kind==='requirement'?'需求按计划开始 / 结束日期（planStart / planEnd）筛选；未排期需求单独列出。':'未完整排期的任务单独列出；此列表不计算人员负荷或任务依赖。'});
+      return result({kind,...(kind==='requirement'?{basis:opts.basis || 'development'}:{}),items,count:items.length,unscheduled,note:kind==='requirement'?'默认使用有效任务的研发区间，无任务日期时回退承诺；dateSource（日期来源）标明 tasks（任务）或 commitment（承诺）。--basis commitment 单独查询承诺。':'未完整排期的任务单独列出；此列表不计算人员负荷或任务依赖。'});
     }
     return result({items,count:items.length});
   }
   if(plural && pos.length===3 && ['get','members','history'].includes(action)) {
     allowed(opts,[]);identifier(id);
-    if(action==='members' && group!=='project' || action==='history' && group!=='requirement') fail('USAGE','此对象不支持该命令。');
+    if(action==='members' && group!=='project' || action==='history' && group==='project') fail('USAGE','此对象不支持该命令。');
     return result((await client.request(`/api/${plural}/${id}`+(action==='get'?'':`/${action}`))).data);
+  }
+  if(group==='requirement' && ['return','reopen'].includes(action) && pos.length===3) {
+    allowed(opts,['version','reason','data','data-file','dry-run']);identifier(id);
+    const body=await payload(opts),fields=SCHEMA.requirementActions[action].fields;
+    for(const key of Object.keys(body)) if(!fields.includes(key)) fail('USAGE',`此操作不支持字段：${key}`);
+    if(!Number.isSafeInteger(body.version) || body.version<1) fail('VERSION_REQUIRED','请提供需求当前版本号。');
+    if(typeof body.reason!=='string' || !body.reason.trim()) fail('USAGE','请填写操作原因。');
+    if(action==='return') {
+      if(!Array.isArray(body.taskIds) || !body.taskIds.length || body.taskIds.length>100) fail('USAGE','退回必须提供 1 至 100 个返工任务编号 taskIds（任务编号列表）。');
+      body.taskIds.forEach(identifier);
+    }
+    const endpoint=`/api/requirements/${id}/${action}`;
+    if(opts['dry-run']) return result({previewOnly:true,serverValidated:false,method:'POST',endpoint,body});
+    return result((await client.request(endpoint,{method:'POST',body})).data);
   }
   if(['requirement','task'].includes(group) && ['archive','restore'].includes(action) && pos.length===3) {
     allowed(opts,['version','dry-run']);identifier(id);
@@ -286,21 +325,23 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
     }
     fail('USAGE','文档命令格式错误，使用 --help 查看。');
   }
-  if(group==='requirement' && action==='import' && pos.length===2) {
+  if(['requirement','proposal'].includes(group) && action==='import' && pos.length===2) {
     allowed(opts,['project','data','data-file','dry-run']);
-    const projectId=identifier(opts.project),items=await listPayload(opts,'requirements');
+    const projectId=identifier(opts.project),items=await listPayload(opts,plural);
     const {data}=await client.request('/api/bootstrap');
     if(!data.projects.some(project=>project.id===projectId)) fail('NOT_FOUND','没有这个项目或无权访问，请先 project list 查询。');
     const documents=(await client.request(`/api/projects/${projectId}/documents`)).data.documents;
-    const existing=new Map(data.requirements.filter(item=>item.projectId===projectId && !item.archived).map(item=>[item.title.trim(),item.id]));
-    const warnings=[],plan=[],seen=new Set();
+    const existing=new Map(data[plural].filter(item=>item.projectId===projectId && !item.archived && (group!=='requirement' || !['未确定','待评审'].includes(item.status))).map(item=>[item.title.trim(),item.id]));
+    const warnings=[],errors=[],plan=[],seen=new Set();
     items.forEach((item,index)=>{
       const {key,...body}=item,where=`第 ${index+1} 条「${body.title || ''}」`;
       if(body.projectId!==undefined && body.projectId!==projectId) fail('USAGE',`${where} 的 projectId 与 --project 不一致。`);
       body.projectId=projectId;
-      for(const field of Object.keys(body)) if(!SCHEMA.requirement.create.includes(field)) fail('USAGE',`${where} 不支持字段：${field}`);
+      for(const field of Object.keys(body)) if(!SCHEMA[group].create.includes(field)) fail('USAGE',`${where} 不支持字段：${field}`);
       if(typeof body.title!=='string' || !body.title.trim()) fail('USAGE',`${where} 缺少标题。`);
       if(seen.has(body.title.trim())) fail('USAGE',`${where} 与本文件中的另一条需求同名。`);seen.add(body.title.trim());
+      if(body.docRefs!==undefined && (!Array.isArray(body.docRefs) || body.docRefs.some(ref=>!ref || typeof ref.document!=='string' || ref.sections!==undefined && (!Array.isArray(ref.sections) || ref.sections.some(code=>typeof code!=='string'))))) fail('USAGE',`${where} 的 docRefs（文档引用）格式无效。`);
+      if(body.acceptanceCases!==undefined && (!Array.isArray(body.acceptanceCases) || body.acceptanceCases.some(code=>typeof code!=='string'))) fail('USAGE',`${where} 的 acceptanceCases（验收用例）必须是文本数组。`);
       for(const ref of body.docRefs || []) {
         const doc=documents.find(documentItem=>documentItem.name===ref.document);
         if(!doc) {warnings.push(`${where}：文档 ${ref.document} 尚未上传，章节无法校验`);continue;}
@@ -308,81 +349,117 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
         if(unknown.length) warnings.push(`${where}：${ref.document} 中找不到章节 ${unknown.join('、')}`);
       }
       const caseCodes=new Set(documents.filter(doc=>doc.type==='验收用例').flatMap(doc=>doc.sections.map(section=>section.code)));
-      const unknownCases=(body.acceptanceCases || []).filter(code=>caseCodes.size && !caseCodes.has(code));
+      const unknownCases=(body.acceptanceCases || []).filter(code=>!caseCodes.has(code));
       if(unknownCases.length) warnings.push(`${where}：验收用例文档中找不到 ${unknownCases.join('、')}`);
-      if(!body.acceptance) warnings.push(`${where}：没有填写验收标准，之后无法流转到「已确定」`);
+      if(group==='requirement' && !existing.has(body.title.trim())) {
+        if((data.proposals || []).some(proposal=>proposal.projectId===projectId && !proposal.archived && proposal.status!=='已转需求' && proposal.title.trim()===body.title.trim())) errors.push(`${where}：存在同名待评估提议，请用 proposal approve（确认转需求）保留原编号及关联。`);
+        if(typeof body.description!=='string' || !body.description.trim() || typeof body.acceptance!=='string' || !body.acceptance.trim()) errors.push(`${where}：已确认需求必须填写 description（背景与目标）和 acceptance（验收标准）；待评估内容请用 proposal import（导入提议）。`);
+        if(body.status && body.status!=='已确定') errors.push(`${where}：新需求状态只能是「已确定」。`);
+      }
       plan.push({key:key ?? null,title:body.title,existingId:existing.get(body.title.trim()) || null,body});
     });
-    if(opts['dry-run']) return result({previewOnly:true,create:plan.filter(item=>!item.existingId).map(item=>({key:item.key,title:item.title})),exists:plan.filter(item=>item.existingId).map(item=>({key:item.key,title:item.title,id:item.existingId})),warnings});
+    if(opts['dry-run']) return result({previewOnly:true,serverValidated:false,create:plan.filter(item=>!item.existingId).map(item=>({key:item.key,title:item.title})),exists:plan.filter(item=>item.existingId).map(item=>({key:item.key,title:item.title,id:item.existingId})),warnings,errors});
+    if(errors.length) fail('INVALID_IMPORT','导入预检未通过，未写入任何记录。',{details:errors});
     const results=[];
     for(const item of plan) {
       if(item.existingId) {results.push({key:item.key,title:item.title,id:item.existingId,result:'exists'});continue;}
-      try {const created=(await client.request('/api/requirements',{method:'POST',body:item.body})).data;results.push({key:item.key,title:item.title,id:created.id,result:'created'});}
-      catch(error) {error.message+=` 已处理 ${results.length} 条，重新执行同一命令会跳过已创建的需求。`;error.details={results,failed:item.title};throw error;}
+      try {const created=(await client.request(`/api/${plural}`,{method:'POST',body:item.body})).data;results.push({key:item.key,title:item.title,id:created.id,result:'created'});}
+      catch(error) {error.message+=` 已处理 ${results.length} 条；请先查询核对结果，同名记录会跳过，但并发导入不保证去重。`;error.details={results,failed:item.title,cause:error.details};throw error;}
     }
     return result({items:results,created:results.filter(item=>item.result==='created').length,existing:results.filter(item=>item.result==='exists').length,warnings});
   }
   if(group==='plan' && ['preview','apply'].includes(action) && pos.length===2) {
     allowed(opts,['project','data','data-file',...(action==='apply'?['force']:[])]);
     const projectId=identifier(opts.project),plan=validatePlan(await objectPayload(opts));
-    const {data}=await client.request('/api/bootstrap');
-    const project=data.projects.find(item=>item.id===projectId);if(!project) fail('NOT_FOUND','没有这个项目或无权访问。');
+    const {data}=await client.request('/api/bootstrap?includeArchived=1');
+    const project=data.projects.find(item=>item.id===projectId && !item.archived);if(!project) fail('NOT_FOUND','没有这个项目、项目已归档或无权访问。');
     const members=data.memberships.filter(item=>item.projectId===projectId),users=new Map(data.users.map(item=>[item.id,item]));
     const aliases=plan.owners || {};
     const resolveOwner=value=>{
-      const name=aliases[value] ?? value,user=users.get(name) || data.users.find(item=>item.username===name);
-      if(!user) fail('INVALID_PLAN',`找不到负责人 ${value}，请用 project members 查询用户名。`);
-      const member=members.find(item=>item.userId===user.id);
-      if(!member) fail('INVALID_PLAN',`${user.name}（${user.username}）不是该项目成员。`);
+      const name=Object.hasOwn(aliases,value)?aliases[value]:value,user=users.get(name) || data.users.find(item=>item.username===name);
+      if(!user || user.status==='disabled') fail('INVALID_PLAN',`找不到有效负责人 ${value}，请用 project members（项目成员）查询。`);
+      if(!members.some(item=>item.userId===user.id)) fail('INVALID_PLAN',`${user.name}（${user.username}）不是该项目成员。`);
       return user.id;
     };
-    const owners=new Map();for(const task of plan.tasks) owners.set(task.owner,resolveOwner(task.owner));
-    const warnings=[];
-    for(const [alias,userId] of owners) {const role=members.find(item=>item.userId===userId).role;if(!['lead','developer'].includes(role)) warnings.push(`${users.get(userId).name} 在项目中的角色是 ${role}，通常任务负责人应为主开发或开发`);}
-    const requirementIds=[...new Set(plan.tasks.map(task=>task.requirement))];
-    const requirements=new Map();
+    const planKey=createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0,12);
+    const requirementIds=[...new Set(plan.tasks.map(task=>task.requirement))],requirements=new Map(),prior=new Map();
+    const blocked=[],notConfirmed=[],warnings=[];
     for(const id of requirementIds) {
       const item=data.requirements.find(requirement=>requirement.id===id);
-      if(!item || item.projectId!==projectId || item.archived) fail('INVALID_PLAN',`需求 ${id} 不在该项目中或已归档，请用 requirement list 查询编号。`);
+      if(!item || item.projectId!==projectId || item.archived) fail('INVALID_PLAN',`需求 ${id} 不在该项目中或已归档，请用 requirement list（需求列表）查询编号。`);
       requirements.set(id,item);
+      const existing=data.tasks.filter(task=>task.requirementId===id),live=existing.filter(task=>!task.archived);
+      // Use the server's audit trail as provenance. Equal titles alone are not proof
+      // that these tasks belong to this plan; retries never overwrite manual edits.
+      const history=(await client.request(`/api/requirements/${id}/history`)).data.entries;
+      const batchHistory=history.find(entry=>entry.action==='split_tasks' && entry.detail?.requestId===`plan-${planKey}-${id}`),alreadyCreated=Boolean(batchHistory);
+      if(!alreadyCreated && !existing.length) {
+        if(plan.tasks.filter(task=>task.requirement===id).length>100) blocked.push(`${id}：一次最多拆分 100 个任务。`);
+        if(['未确定','待评审'].includes(item.status)) {const message=`${id} ${item.title}：请先通过 proposal approve（确认提议）纳入需求池。`;blocked.push(message);notConfirmed.push(message);}
+        if(['已完成','已终止'].includes(item.status)) blocked.push(`${id} ${item.title}：需求已结束，请先使用 requirement reopen（重新打开需求）。`);
+      }
+      prior.set(id,{live,alreadyCreated,batchTaskIds:new Set(batchHistory?.detail.taskIds || []),skip:existing.length && !alreadyCreated?`已有 ${existing.length} 个其他任务（含归档），无法确认来自本计划`:null});
     }
+    const pendingIds=new Set(requirementIds.filter(id=>!prior.get(id).alreadyCreated && !prior.get(id).skip));
     const stage=status=>({'待开始':'wait','开发中':'develop','测试中':'test','已完成':'done','已终止':'terminated'}[status] || status);
-    const busyUntil={};
-    for(const task of data.tasks) if(!task.archived && !['done','terminated'].includes(stage(task.status)) && task.dueDate && !requirementIds.includes(task.requirementId) && (!busyUntil[task.ownerId] || task.dueDate>busyUntil[task.ownerId])) busyUntil[task.ownerId]=task.dueDate;
-    const schedule=schedulePlan(plan,{busyUntil,ownerOf:value=>owners.get(value)});
-    const planKey=createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0,12);
+    const busyUntil=Object.create(null),activeProjects=new Set(data.projects.filter(item=>!item.archived).map(item=>item.id));
+    const archivedRequirements=new Set(data.requirements.filter(item=>item.archived).map(item=>item.id));
+    for(const task of data.tasks) if(activeProjects.has(task.projectId) && !archivedRequirements.has(task.requirementId) && !task.archived && !['done','terminated'].includes(stage(task.status)) && task.dueDate && !pendingIds.has(task.requirementId) && (!busyUntil[task.ownerId] || task.dueDate>busyUntil[task.ownerId])) busyUntil[task.ownerId]=task.dueDate;
+    const pendingTasks=plan.tasks.filter(task=>pendingIds.has(task.requirement));
+    const owners=new Map();for(const task of pendingTasks) owners.set(task.owner,resolveOwner(task.owner));
+    const pendingTitles=new Set(pendingTasks.map(task=>task.title));
+    const startsAfter=Object.create(null);
+    const remainingTasks=pendingTasks.map(task=>({...task,after:(task.after || []).filter(title=>{
+      if(pendingTitles.has(title)) return true;
+      const original=plan.tasks.find(item=>item.title===title),previous=prior.get(original.requirement);
+      const matches=previous.live.filter(item=>previous.batchTaskIds.has(item.id) && item.title===title && !['terminated','已终止'].includes(item.status));
+      if(!previous.alreadyCreated || matches.length!==1 || !matches[0].dueDate) fail('INVALID_PLAN',`「${task.title}」依赖的已有任务「${title}」无法确认实际结束日，请核对后调整计划。`);
+      date(matches[0].dueDate);
+      if(!startsAfter[task.title] || matches[0].dueDate>startsAfter[task.title]) startsAfter[task.title]=matches[0].dueDate;
+      return false;
+    })}));
+    const schedule=remainingTasks.length?schedulePlan({...plan,tasks:remainingTasks},{busyUntil,startsAfter,ownerOf:value=>owners.get(value)}):{tasks:[],requirements:[],load:{},phaseEnds:{},granularity:{averageHours:0,under8:0,over24:[]}};
     const name=id=>users.get(id)?.username || id;
-    const rows=schedule.requirements.map(entry=>{
-      const requirement=requirements.get(entry.requirementId),live=data.tasks.filter(task=>task.requirementId===entry.requirementId && !task.archived);
-      const planTitles=new Set(entry.tasks.map(task=>task.title)),fromThisPlan=live.length>0 && live.length===entry.tasks.length && live.every(task=>planTitles.has(task.title));
-      return {requirementId:entry.requirementId,title:requirement.title,status:requirement.status,version:requirement.version,planStart:entry.planStart,planEnd:entry.planEnd,assignee:name(entry.assignee),collaborators:entry.collaborators.map(name),hours:entry.hours,
-        late:Boolean(project.targetDate && entry.planEnd>project.targetDate),skip:live.length && !fromThisPlan?`已有 ${live.length} 个其他任务`:null,alreadyCreated:fromThisPlan,
-        tasks:entry.tasks.map(task=>({title:task.title,owner:name(task.owner),phase:task.phase ?? '',hours:task.hours,startDate:task.startDate,dueDate:task.dueDate})),entry};
+    const rows=requirementIds.map(id=>{
+      const requirement=requirements.get(id),{live,alreadyCreated,skip}=prior.get(id),entry=schedule.requirements.find(item=>item.requirementId===id);
+      const active=live.filter(task=>stage(task.status)!=='terminated');
+      const developmentStart=entry?.tasks.map(task=>task.startDate).sort()[0] || active.map(task=>task.startDate).filter(Boolean).sort()[0] || '';
+      const developmentEnd=entry?.tasks.map(task=>task.dueDate).sort().at(-1) || active.map(task=>task.dueDate).filter(Boolean).sort().at(-1) || '';
+      return {requirementId:id,title:requirement.title,status:requirement.status,version:requirement.version,
+        planStart:entry?.planStart || '',planEnd:entry?.planEnd || '',developmentStart,developmentEnd,
+        commitmentStart:requirement.planStart || '',commitmentEnd:requirement.planEnd || '',
+        assignee:name(entry?.assignee || requirement.assigneeId),collaborators:(entry?.collaborators || requirement.collaboratorIds || []).map(name),hours:entry?.hours ?? active.reduce((sum,task)=>sum+(Number(task.estimateHours)||0),0),
+        late:Boolean(entry && project.targetDate && entry.planEnd>project.targetDate),beyondCommitment:Boolean(entry && requirement.planEnd && developmentEnd>requirement.planEnd),skip,alreadyCreated,
+        tasks:entry?entry.tasks.map(task=>({title:task.title,owner:name(task.owner),phase:task.phase ?? '',hours:task.hours,startDate:task.startDate,dueDate:task.dueDate})):live.map(task=>({id:task.id,title:task.title,owner:name(task.ownerId),hours:task.estimateHours,startDate:task.startDate,dueDate:task.dueDate})),entry};
     });
-    const late=rows.filter(row=>row.late && !row.skip).map(row=>`${row.requirementId} ${row.title}：计划 ${row.planEnd}，晚于项目目标 ${project.targetDate}`);
+    const late=rows.filter(row=>row.late).map(row=>`${row.requirementId} ${row.title}：建议交付 ${row.planEnd}，晚于项目目标 ${project.targetDate}`);
+    const beyondCommitment=rows.filter(row=>row.beyondCommitment).map(row=>`${row.requirementId} ${row.title}：研发结束 ${row.developmentEnd}，晚于现有承诺 ${row.commitmentEnd}；保留原承诺。`);
     const phaseLate=Object.entries(plan.phaseDeadlines || {}).filter(([phase,deadline])=>schedule.phaseEnds[phase] && schedule.phaseEnds[phase]>deadline).map(([phase,deadline])=>`阶段 ${phase} 最晚 ${schedule.phaseEnds[phase]}，晚于节点 ${deadline}`);
-    const notConfirmed=rows.filter(row=>!row.skip && !['已确定','已排期'].includes(row.status)).map(row=>`${row.requirementId} ${row.title}：当前「${row.status}」，只会写入任务和计划日期，确认后再流转`);
     const summary={project:{id:project.id,name:project.name,targetDate:project.targetDate || null},planKey,tasks:schedule.tasks.length,requirements:rows.length,granularity:schedule.granularity,
-      load:Object.fromEntries(Object.entries(schedule.load).map(([id,item])=>[name(id),{...item,startsAfterExisting:busyUntil[id] || null}])),phaseEnds:schedule.phaseEnds,late,phaseLate,notConfirmed,warnings,skipped:rows.filter(row=>row.skip).map(row=>`${row.requirementId} ${row.title}：${row.skip}，跳过`)};
+      load:Object.fromEntries(Object.entries(schedule.load).map(([id,item])=>[name(id),{...item,startsAfterExisting:busyUntil[id] || null}])),phaseEnds:schedule.phaseEnds,late,phaseLate,beyondCommitment,notConfirmed,blocked,warnings,
+      skipped:rows.filter(row=>row.skip).map(row=>`${row.requirementId} ${row.title}：${row.skip}，跳过`),note:'planStart / planEnd（建议交付日期）仅供参考；不修改需求承诺日期与基线，研发阶段由后端按任务自动同步。'};
     if(action==='preview') return result({...summary,previewOnly:true,requirements:rows.map(({entry,version,...row})=>row)});
     const me=data.currentUser,role=me.role==='admin'?'admin':members.find(item=>item.userId===me.id)?.role;
-    if(!['admin','lead'].includes(role)) fail('FORBIDDEN','拆分任务并指派给他人需要主开发或管理员账号，请用对应账号登录后再执行。');
-    if(late.length && !opts.force) fail('CONFIRMATION_REQUIRED',`有 ${late.length} 条需求计划晚于项目目标日期，未写入。确认接受后加 --force。`,{details:late});
+    if(!['admin','lead'].includes(role)) fail('FORBIDDEN','拆分任务并指派给他人需要主开发或管理员账号。');
+    if(blocked.length) fail('INVALID_PLAN','计划含不可排期需求，未写入任何记录。',{details:blocked});
+    const risks=[...late,...beyondCommitment,...phaseLate];
+    if(risks.length && !opts.force) fail('CONFIRMATION_REQUIRED','计划晚于项目目标、既有承诺或阶段节点，未写入。确认接受后加 --force。',{details:risks});
     const done=[];
     for(const row of rows) {
-      if(row.skip) {done.push({requirementId:row.requirementId,result:'skipped',reason:row.skip});continue;}
+      if(row.skip) {done.push({requirementId:row.requirementId,result:'skipped',reason:row.skip,createdTasks:0});continue;}
+      if(row.alreadyCreated) {done.push({requirementId:row.requirementId,result:'alreadyCreated',createdTasks:0,status:row.status,planStart:row.commitmentStart,planEnd:row.commitmentEnd});continue;}
       try {
-        let created=0;
-        if(!row.alreadyCreated) {
-          const version=(await client.request(`/api/requirements/${row.requirementId}`)).data.version;
-          const batch=(await client.request(`/api/requirements/${row.requirementId}/task-batch`,{method:'POST',body:{version,requestId:`plan-${planKey}-${row.requirementId}`,tasks:row.entry.tasks.map(task=>({title:task.title,ownerId:task.owner,startDate:task.startDate,dueDate:task.dueDate,estimateHours:task.hours,description:task.desc || ''}))}})).data;
-          created=batch.replayed?0:batch.tasks.length;
+        // Set assignment first; once the batch exists a retry can be completely
+        // read-only. Keep the snapshot version so concurrent edits are rejected.
+        const current=requirements.get(row.requirementId);
+        let version=row.version;
+        if(current.assigneeId!==row.entry.assignee || JSON.stringify(current.collaboratorIds || [])!==JSON.stringify(row.entry.collaborators)) {
+          const updated=(await client.request(`/api/requirements/${row.requirementId}`,{method:'PATCH',body:{version,assigneeId:row.entry.assignee,collaboratorIds:row.entry.collaborators}})).data;
+          version=updated.version;
         }
-        const current=(await client.request(`/api/requirements/${row.requirementId}`)).data;
-        const body={version:current.version,assigneeId:row.entry.assignee,collaboratorIds:row.entry.collaborators,planStart:row.planStart,planEnd:row.planEnd,...(current.status==='已确定'?{status:'已排期'}:{}),...(row.late?{force:true}:{})};
-        const updated=(await client.request(`/api/requirements/${row.requirementId}`,{method:'PATCH',body})).data;
-        done.push({requirementId:row.requirementId,result:'scheduled',createdTasks:created,status:updated.status,planStart:updated.planStart,planEnd:updated.planEnd});
-      } catch(error) {error.message+=` 已完成 ${done.length} 条需求；重新执行同一计划会跳过已创建的任务。`;error.details={done,failed:row.requirementId};throw error;}
+        const batch=(await client.request(`/api/requirements/${row.requirementId}/task-batch`,{method:'POST',body:{version,requestId:`plan-${planKey}-${row.requirementId}`,tasks:row.entry.tasks.map(task=>({title:task.title,ownerId:task.owner,startDate:task.startDate,dueDate:task.dueDate,estimateHours:task.hours,description:task.desc || ''}))}})).data;
+        done.push({requirementId:row.requirementId,result:'scheduled',createdTasks:batch.replayed?0:batch.tasks.length,status:batch.requirement.status,planStart:batch.requirement.planStart,planEnd:batch.requirement.planEnd,developmentStart:row.developmentStart,developmentEnd:row.developmentEnd});
+      } catch(error) {error.message+=` 已处理 ${done.length} 条需求；此计划不是跨需求事务，请先查询核对，再重跑同一文件。已有本计划任务不会覆盖。`;error.details={done,failed:row.requirementId,cause:error.details};throw error;}
     }
     return result({...summary,items:done});
   }
@@ -390,8 +467,9 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
     allowed(opts,['date']);if(opts.date) date(opts.date);
     return result((await client.request('/api/work'+(opts.date?`?date=${opts.date}`:''))).data);
   }
-  if(['requirement','task'].includes(group) && ['create','update','schedule'].includes(action) && pos.length===(action==='create'?2:3)) {
-    allowed(opts,['project','requirement','title','description','owner','status','priority','hours','points','version','data','data-file','dry-run',...(action==='schedule'?['start','end']:[])]);
+  if(['requirement','task','proposal'].includes(group) && ['create','update','schedule',...(group==='proposal'?['approve']:[])].includes(action) && pos.length===(action==='create'?2:3)) {
+    if(group==='proposal' && action==='schedule') fail('USAGE','提议需先确认转需求，再安排任务。');
+    allowed(opts,['project','requirement','title','description','acceptance','owner','assignee','status','priority','hours','points','version','reason','data','data-file','dry-run',...(group==='proposal'?['proposer','decision-reason']:[]),...(group==='requirement' && action!=='create'?['force']:[]),...(action==='schedule'?['start','end']:[])]);
     const body=await payload(opts);
     if(action!=='create') {identifier(id);if(!Number.isSafeInteger(body.version) || body.version<1) fail('VERSION_REQUIRED','修改必须提供查询结果中的 version（版本号）。');}
     else {identifier(body.projectId);if(typeof body.title!=='string' || !body.title.trim()) fail('USAGE','创建必须提供标题。');}
@@ -402,9 +480,9 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
       if(keys.some(k=>Object.hasOwn(body,k))) fail('USAGE','排期日期不能在参数和数据文件中重复指定。');
       body[keys[0]]=start;body[keys[1]]=end;
     }
-    const fields=SCHEMA[group][action==='create'?'create':'update'];
+    const fields=SCHEMA[group][['create','approve'].includes(action)?action:'update'];
     for(const key of Object.keys(body)) if(!fields.includes(key)) fail('USAGE',`此操作不支持字段：${key}`);
-    const endpoint=`/api/${plural}`+(action==='create'?'':`/${id}`),method=action==='create'?'POST':'PATCH';
+    const endpoint=`/api/${plural}`+(action==='create'?'':`/${id}`)+(action==='approve'?'/approve':''),method=['create','approve'].includes(action)?'POST':'PATCH';
     if(opts['dry-run']) return result({previewOnly:true,serverValidated:false,method,endpoint,body});
     return result((await client.request(endpoint,{method,body})).data);
   }

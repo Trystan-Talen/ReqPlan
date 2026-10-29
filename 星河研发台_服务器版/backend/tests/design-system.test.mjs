@@ -137,4 +137,8 @@ test('ui-kit 组件转义用户内容并输出约定结构', () => {
   assert.match(kit.button({ label: '新建', variant: 'primary', iconName: 'plus', action: 'new-task' }), /^<button type="button" class="btn btn-primary" data-action="new-task"><svg/);
   assert.match(kit.button({ label: '详情', variant: 'text', data: { taskId: 't-1' } }), /class="text-button" data-task-id="t-1"/);
   assert.match(kit.heading('需求池', '说明', '', '项目'), /^<section class="page-heading"><div><span class="scope-pill">项目<\/span><h1>需求池<\/h1>/);
+  const welcome = kit.workbenchWelcome({ scope: attack, title: attack, summaryHtml: '你有 <strong>3</strong> 项待办。' });
+  assert.doesNotMatch(welcome, /<img src=x|<h1>"/);
+  assert.match(welcome, /<h1>&quot;&gt;&lt;img/);
+  assert.match(welcome, /你有 <strong>3<\/strong> 项待办。/);
 });

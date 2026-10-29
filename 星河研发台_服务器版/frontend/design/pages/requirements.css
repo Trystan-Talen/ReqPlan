@@ -29,6 +29,27 @@
   .delivery-workflow { padding: var(--space-3); gap: var(--space-3); }
   .delivery-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .proposal-list .proposal-title-cell { min-width: 220px; max-width: 280px; }
+  .proposal-pool .pagination button { min-height: 44px; }
+  .proposal-list time, .dialog-body[data-proposal-id] .detail-kv time { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+  .dialog-body[data-proposal-id] .doc-ref button { min-height: 44px; }
+  .dialog-body[data-proposal-id] .doc-ref-head > button { max-width: 100%; }
+  .dialog-body[data-proposal-id] .doc-ref.is-missing { flex-wrap: wrap; overflow-wrap: anywhere; }
+  :is(.dialog-body[data-proposal-id], .dialog-body[data-detail-id]) .history-row { overflow-wrap: anywhere; }
+  .requirement-pool .title-cell { min-width: 280px; max-width: 320px; }
+  .requirement-pool .pagination button { min-height: 44px; }
+  .requirement-pool time, .dialog-body[data-detail-id] .detail-kv time { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+  .dialog-body[data-detail-id] .linked-task { align-items: flex-start; }
+  .dialog-body[data-detail-id] .linked-task .person { min-width: 0; align-items: flex-start; }
+  .dialog-body[data-detail-id] .linked-task .person .item-title { min-width: 0; min-height: 44px; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .dialog-body[data-detail-id] .linked-task .badge { flex: none; }
+  :is(.dialog-body[data-detail-id], form[data-kind="requirements"]) .baseline-panel .change-table { min-width: 460px; }
+  :is(.dialog-body[data-detail-id], form[data-kind="requirements"]) .baseline-panel td { white-space: nowrap; word-break: normal; }
+  .dialog-body[data-detail-id] .doc-ref button, .dialog-body[data-detail-id] .attachment-actions button { min-height: 44px; }
+  .dialog-body[data-detail-id] .doc-ref-head > button { max-width: 100%; }
+  .dialog-body[data-detail-id] .doc-ref.is-missing { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .dialog-body[data-detail-id] .attachment-item { flex-wrap: wrap; }
+  .dialog-body[data-detail-id] .attachment-item > span { flex-basis: calc(100% - 50px); overflow-wrap: anywhere; }
+  .dialog-body[data-detail-id] .upload-row input { min-width: 0; max-width: 100%; }
 }
 .requirement-planning-fields { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-3); }
 .requirement-planning-fields > summary { cursor: pointer; color: var(--text-2); font-weight: 600; }

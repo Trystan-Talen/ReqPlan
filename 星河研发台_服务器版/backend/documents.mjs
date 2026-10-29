@@ -21,6 +21,10 @@ function title(value, fallback) {
   if (typeof value !== 'string' || value.length > 200 || /[\u0000-\u001f\u007f]/.test(value)) fail(400, '文档标题格式不正确');
   return value.trim() || fallback;
 }
+function optionalBoolean(value, label) {
+  if (value !== undefined && typeof value !== 'boolean') fail(400, `${label}必须为布尔值`);
+  return value;
+}
 function content(buffer) {
   if (!Buffer.isBuffer(buffer) || !buffer.length || buffer.length > DOCUMENT_LIMIT) fail(413, '文档应为非空文件且不超过 2 兆字节', 'FILE_TOO_LARGE');
   let text;
@@ -78,6 +82,7 @@ export function createDocumentService(db, { authorize, audit }) {
   function uploadDocument(actor, projectId, input) {
     const allowed = ['name', 'title', 'type', 'primary', 'contentBuffer', 'documentId', 'expectedVersion', 'note', 'source'];
     if (!input || Object.getPrototypeOf(input) !== Object.prototype || Object.keys(input).some(key => !allowed.includes(key))) fail(400, '文档提交包含不支持的字段');
+    optionalBoolean(input.primary, '主文档标记');
     return transaction(db, () => {
       const file = fileName(input.name); const text = content(input.contentBuffer);
       let row = input.documentId !== undefined ? documentRow(input.documentId) : get('SELECT * FROM documents WHERE project_id=? AND name=?', identifier(projectId), file.name);
@@ -117,6 +122,7 @@ export function createDocumentService(db, { authorize, audit }) {
   }
   function updateDocument(actor, documentId, input) {
     if (!input || Object.getPrototypeOf(input) !== Object.prototype || Object.keys(input).some(key => !['title', 'type', 'primary'].includes(key))) fail(400, '文档修改包含不支持的字段');
+    optionalBoolean(input.primary, '主文档标记');
     return transaction(db, () => {
       const row = documentRow(documentId); const type = input.type ?? row.type;
       if (!DOCUMENT_TYPES.includes(type)) fail(400, '文档类型不是允许的选项');

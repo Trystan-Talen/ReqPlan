@@ -64,7 +64,7 @@ body.dialog-open { overflow: hidden; }
 
 /* ---------- Brand ---------- */
 .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.brand-mark { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; color: var(--on-night); background: var(--night-surface); box-shadow: var(--shadow-brand); }
+.brand-mark { width: 34px; height: 34px; flex: none; border-radius: 10px; display: grid; place-items: center; color: var(--on-night); background: var(--brand-primary); box-shadow: var(--shadow-brand); }
 .brand-mark svg { width: 34px; height: 34px; }
 .brand-stop-from { stop-color: var(--brand-from); }
 .brand-stop-to { stop-color: var(--brand-to); }

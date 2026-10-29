@@ -76,3 +76,35 @@
   .doc-outline { position: static; max-height: 260px; }
   .doc-primary { flex-direction: column; align-items: flex-start; }
 }
+
+@media (max-width: 560px) {
+  #document-form .field-help { overflow-wrap: anywhere; }
+  #document-form input[type="file"] { min-width: 0; max-width: 100%; }
+  .doc-primary, .doc-primary > div { max-width: 100%; }
+  .doc-primary > div { min-width: 0; }
+  .doc-primary > div > .text-button { max-width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+  .doc-primary .item-meta, .doc-table .item-meta { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; font-size: var(--text-sm); }
+  .doc-primary .item-meta > span, .doc-table .item-meta > span { min-width: 0; }
+  .doc-primary time, .doc-table time, .doc-reader time, .doc-version-list time { white-space: nowrap; overflow-wrap: normal; }
+  .doc-actions { max-width: 100%; flex-wrap: wrap; }
+  .doc-filters .segmented button { min-height: 44px; height: auto; }
+  .doc-table th:first-child, .doc-table td:first-child { width: 240px; min-width: 240px; max-width: 240px; white-space: normal; }
+  .doc-table .doc-name .text-button { max-width: 100%; white-space: normal; }
+  .doc-table td:nth-last-child(2) .item-meta { min-width: 140px; max-width: 220px; }
+  .doc-reader, .doc-viewer, .doc-content, .doc-outline { min-width: 0; max-width: 100%; }
+  .doc-reader .field-help, .doc-reader .document-body, .doc-meta > span, .doc-changed > span { overflow-wrap: anywhere; }
+  .doc-reader pre { overflow-wrap: normal; }
+  .doc-meta > span, .doc-changed > span { min-width: 0; max-width: 100%; }
+  .doc-outline h3 { flex-wrap: wrap; }
+  .doc-outline-links .text-button { font-size: var(--text-sm); }
+  .doc-reader .feature-scenario header { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .doc-reader .feature-scenario header > code, .doc-reader .feature-scenario header > strong { min-width: 0; max-width: 100%; }
+  .doc-version-list, .doc-version-list .attachment-version > div { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .doc-version-list .attachment-version { min-width: 0; flex-direction: column; align-items: stretch; }
+  .doc-version-list .attachment-version p { font-size: var(--text-sm); }
+  .dialog-body:has(> .doc-version-list) > .form-intro { overflow-wrap: anywhere; }
+  .doc-ref.is-missing { flex-wrap: wrap; overflow-wrap: anywhere; }
+  .doc-ref-head > .text-button { max-width: 100%; }
+  .doc-ref-actions { max-width: 100%; flex-wrap: wrap; }
+  .doc-chips > button { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
+}

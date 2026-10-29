@@ -84,6 +84,39 @@ test('全局甘特范围覆盖所有可见项目周期、需求与任务；页�
   assert.match(issues, /没有符合条件的项目/);
 });
 
+test('折叠项目视图不读取仅用于任务行的标题，仍显示完整汇总与日期范围', () => {
+  const hiddenTask = task();
+  Object.defineProperty(hiddenTask, 'title', { get() { throw new Error('未显示的任务行不应读取标题'); } });
+  const html = renderPortfolio({
+    projects: [{ id: 'p1', name: '项目', targetDate: '2026-10-20' }],
+    requirements: [req()], tasks: [hiddenTask], users: [{ id: 'u1', name: '开发甲' }], today,
+    state: { ...createTimelineState(today), fit: true },
+    filters: { view: 'project', project: 'all', owner: 'all', issues: false }, expanded: new Set(),
+  });
+  assert.match(html, /portfolio-project-bar/);
+  assert.match(html, /任务逾期 5 天/);
+  assert.match(html, /需求排期 2026-10-01 — 2026-10-05/);
+  assert.match(html, /value="u1">开发甲/);
+  assert.doesNotMatch(html, /portfolio-lane-bar|data-task="t1"/);
+});
+
+test('人员视图不访问项目展开状态，仍显示任务泳道与共享项目概况', () => {
+  class UnreadableExpansion extends Set {
+    has() { throw new Error('人员视图不应构造项目展开行'); }
+  }
+  const html = renderPortfolio({
+    projects: [{ id: 'p1', name: '项目', targetDate: '2026-10-20' }],
+    requirements: [req()], tasks: [task()], users: [{ id: 'u1', name: '开发甲' }], today,
+    state: { ...createTimelineState(today), fit: true },
+    filters: { view: 'person', project: 'all', owner: 'all', issues: false }, expanded: new UnreadableExpansion(),
+  });
+  assert.match(html, /项目概况/);
+  assert.match(html, /portfolio-lane-bar/);
+  assert.match(html, /data-task="t1"/);
+  assert.match(html, /1 个未完成任务/);
+  assert.doesNotMatch(html, /data-portfolio-toggle|portfolio-project-bar/);
+});
+
 test('研发窗口从有效任务汇总，当前承诺独立保留，未排期不能用承诺冒充',()=>{
   const requirement=req({deliveryWorkflow:true,status:'待排期',planStart:'2026-09-01',planEnd:'2026-11-01'});
   const tasks=[task({startDate:'2026-10-03',dueDate:'2026-10-14'}),task({id:'t2',startDate:'2026-10-06',dueDate:'2026-10-18'}),task({id:'off',status:'terminated',startDate:'2026-01-01',dueDate:'2027-01-01'}),task({id:'archived',archived:true,startDate:'2025-01-01',dueDate:'2028-01-01'})];
