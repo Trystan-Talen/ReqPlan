@@ -2,6 +2,7 @@ FROM node:24.19.0-bookworm-slim
 WORKDIR /app
 COPY --chown=node:node backend ./backend
 COPY --chown=node:node frontend/workflow.js ./frontend/workflow.js
+COPY --chown=node:node frontend/doc-sections.js ./frontend/doc-sections.js
 COPY --chown=node:node package.json ./package.json
 COPY --chown=node:node deploy/admin-recovery.mjs ./deploy/admin-recovery.mjs
 RUN mkdir -p /app/data && chown node:node /app/data

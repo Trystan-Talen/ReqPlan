@@ -52,6 +52,9 @@ test('项目文档：产品经理上传与更新版本，内容不变不生成�
 
 test('项目文档权限：主开发只维护技术方案，开发与观察者只读；主文档每个项目只有一份', t => {
   const { b, actor, p } = fixture(t);
+  for (const value of ['true', 1, 0, {}]) {
+    assert.throws(() => b.uploadDocument(actor.product, p.id, { name: '类型校验.md', primary: value, contentBuffer: file('x') }), error => error.status === 400);
+  }
   assert.throws(() => b.uploadDocument(actor.lead, p.id, { name: '总PRD.md', type: 'PRD', contentBuffer: file('# 总 PRD') }), error => error.status === 403);
   assert.equal(b.uploadDocument(actor.lead, p.id, { name: '架构.md', type: '技术方案', contentBuffer: file('# 架构') }).document.type, '技术方案');
   for (const role of ['dev', 'viewer', 'boss']) assert.throws(() => b.uploadDocument(actor[role], p.id, { name: 'x.md', type: '其他', contentBuffer: file('x') }), error => error.status === 403);
@@ -63,6 +66,9 @@ test('项目文档权限：主开发只维护技术方案，开发与观察者�
   assert.deepEqual(docs.filter(item => item.primary).map(item => item.id), [other.id]);
   assert.equal(b.updateDocument(actor.product, main.id, { primary: true }).primary, true);
   assert.equal(b.listDocuments(actor.dev, p.id).filter(item => item.primary).length, 1);
+  for (const value of ['false', 1, 0, []]) {
+    assert.throws(() => b.updateDocument(actor.product, main.id, { primary: value }), error => error.status === 400);
+  }
   assert.throws(() => b.updateDocument(actor.lead, main.id, { title: '改标题' }), error => error.status === 403);
 });
 

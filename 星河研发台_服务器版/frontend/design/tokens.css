@@ -1,5 +1,5 @@
 /* ==========================================================================
-   星河研发台 · 设计令牌（Design Tokens）
+   星引研发台 · 设计令牌（Design Tokens）
    --------------------------------------------------------------------------
    这是整个界面里【唯一】允许出现颜色字面量的文件。
    组件、布局和页面样式只能引用 var(--…)；需要新颜色时先在这里加令牌，
@@ -67,7 +67,7 @@
 
   /* 2. Theme colors (light) ----------------------------------------------- */
   --bg: #f4f3ef;
-  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(51, 85, 255, .06), transparent 60%);
+  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(91, 95, 199, .025), transparent 60%);
   --surface: #ffffff;
   --surface-2: #fafaf7;
   --surface-3: #f1f0eb;
@@ -80,10 +80,10 @@
   --ink: #15161a;
   --ink-text: #ffffff;
 
-  --accent: #3355ff;
-  --accent-strong: #2440e0;
-  --accent-soft: #eef1ff;
-  --accent-ring: rgba(51, 85, 255, .28);
+  --accent: #5b5fc7;
+  --accent-strong: #4b4fb0;
+  --accent-soft: #eeedf8;
+  --accent-ring: rgba(91, 95, 199, .28);
 
   --sidebar: #0e0f13;
   --sidebar-2: #16171d;
@@ -91,7 +91,11 @@
   --sidebar-text: #a3a6b1;
   --sidebar-text-strong: #f4f4f6;
   --sidebar-hover: rgba(255, 255, 255, .05);
-  --sidebar-active: rgba(255, 255, 255, .09);
+  --sidebar-active: rgba(184, 186, 242, .18);
+  --sidebar-active-border: rgba(184, 186, 242, .30);
+  --sidebar-active-rail: var(--brand-on-dark);
+  --sidebar-active-icon: var(--brand-on-dark);
+  --sidebar-active-text: var(--on-night);
 
   /* Semantic tones: 每个色调都有文字色 + 浅底色，状态标签只从这里取 */
   --c-slate: #667085;   --c-slate-bg: #f0f1f3;
@@ -123,17 +127,24 @@
   --night-line-strong: rgba(255, 255, 255, .16);
   --night-orbit: rgba(255, 255, 255, .06);
   --night-orbit-faint: rgba(255, 255, 255, .012);
-  --glow-violet: rgba(124, 108, 255, .28);
-  --glow-cyan: rgba(34, 195, 230, .22);
-  --brand-from: #8f82ff;
-  --brand-to: #3fd0ec;
-  --brand-soft-from: #a99dff;
-  --brand-soft-to: #5fd8f0;
-  --brand-ring: rgba(143, 130, 255, .25);
+  --brand-primary: #5b5fc7;
+  --brand-on-dark: #b8baf2;
+  --glow-violet: rgba(91, 95, 199, .28);
+  --glow-cyan: rgba(91, 95, 199, .16);
+  --brand-from: #f4f3ef;
+  --brand-to: var(--brand-on-dark);
+  --brand-soft-from: #e6e5ff;
+  --brand-soft-to: var(--brand-on-dark);
+  --brand-ring: rgba(184, 186, 242, .25);
   --night-violet: #a594ff;
   --night-blue: #7ba2ff;
   --night-green: #4fd39a;
-  --on-night-button-hover: #e9e9ff;
+  --on-night-button-hover: #eeedf8;
+  --hero-fill: linear-gradient(110deg, #17181d 0%, #202131 58%, #303052 100%);
+  --hero-border: rgba(184, 186, 242, .12);
+  --hero-secondary: #c4c4d2;
+  --hero-accent: var(--brand-on-dark);
+  --mascot-shadow: rgba(0, 0, 0, .13);
   --starfield:
     radial-gradient(1px 1px at 12% 18%, #fff, transparent 60%), radial-gradient(1px 1px at 32% 62%, #fff, transparent 60%),
     radial-gradient(1.5px 1.5px at 58% 28%, #fff, transparent 60%), radial-gradient(1px 1px at 78% 72%, #fff, transparent 60%),
@@ -145,7 +156,7 @@
   --knob: #ffffff;
   --shadow-knob: 0 1px 2px rgba(0, 0, 0, .25);
   --shadow-button: 0 1px 2px rgba(0, 0, 0, .12), inset 0 1px 0 rgba(255, 255, 255, .08);
-  --shadow-brand: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 6px 18px -6px rgba(124, 108, 255, .55);
+  --shadow-brand: inset 0 0 0 1px rgba(255, 255, 255, .08), 0 6px 18px -6px rgba(91, 95, 199, .32);
   --toast-bg: #15161a;
   --toast-text: #f4f4f6;
   --toast-success: #1f9d63;
@@ -176,7 +187,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #0b0c0f;
-  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(92, 116, 255, .10), transparent 60%);
+  --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(91, 95, 199, .08), transparent 60%);
   --surface: #131419;
   --surface-2: #17181e;
   --surface-3: #1d1f26;
@@ -188,10 +199,11 @@
   --text-3: #6f727b;
   --ink: #f1f1f3;
   --ink-text: #0e0f13;
-  --accent: #6f86ff;
-  --accent-strong: #8b9dff;
-  --accent-soft: rgba(111, 134, 255, .14);
-  --accent-ring: rgba(111, 134, 255, .35);
+  --accent: #b8baf2;
+  --accent-strong: #d2d3fa;
+  --accent-soft: rgba(184, 186, 242, .14);
+  --accent-ring: rgba(184, 186, 242, .35);
+  --on-accent: #17182a;
   --sidebar: #08090b;
   --sidebar-2: #101116;
   --c-slate: #a0a7b5;   --c-slate-bg: rgba(160, 167, 181, .13);
@@ -211,7 +223,7 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #0b0c0f;
-    --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(92, 116, 255, .10), transparent 60%);
+    --bg-grain: radial-gradient(1200px 600px at 100% -10%, rgba(91, 95, 199, .08), transparent 60%);
     --surface: #131419;
     --surface-2: #17181e;
     --surface-3: #1d1f26;
@@ -223,10 +235,11 @@
     --text-3: #6f727b;
     --ink: #f1f1f3;
     --ink-text: #0e0f13;
-    --accent: #6f86ff;
-    --accent-strong: #8b9dff;
-    --accent-soft: rgba(111, 134, 255, .14);
-    --accent-ring: rgba(111, 134, 255, .35);
+    --accent: #b8baf2;
+    --accent-strong: #d2d3fa;
+    --accent-soft: rgba(184, 186, 242, .14);
+    --accent-ring: rgba(184, 186, 242, .35);
+    --on-accent: #17182a;
     --sidebar: #08090b;
     --sidebar-2: #101116;
     --c-slate: #a0a7b5;   --c-slate-bg: rgba(160, 167, 181, .13);

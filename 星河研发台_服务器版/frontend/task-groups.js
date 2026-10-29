@@ -7,16 +7,20 @@ const isClosed = requirement => ['已完成', '已终止'].includes(requirement.
 const mayChange = requirement => !requirement.archived && !isEarly(requirement) && !isClosed(requirement);
 const nameOf = (id, users) => users.find(user => user.id === id)?.name || (id ? '未知成员' : '待指定');
 const readAccess = (check, requirement, role) => typeof check === 'function' ? Boolean(check(requirement)) : ['lead', 'admin'].includes(role);
-const fallbackTask = task => `<div class="task-group-fallback">${button({ label: task.title || '未命名任务', variant: 'text', data: { task: task.id } })}${badge(task.status)}</div>`;
+const fallbackTask = task => `<div class="task-group-fallback">${button({ label: task.title || '未命名任务', variant: 'text', size: 'touch', data: { task: task.id } })}${badge(task.status)}</div>`;
+const scheduleDate = value => {
+  const stamp = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : NaN;
+  return Number.isFinite(stamp) && new Date(stamp).toISOString().slice(0, 10) === value ? `<time datetime="${esc(value)}">${esc(value)}</time>` : esc(value);
+};
 
 function scheduleSummary(requirement, delivery) {
   const start = delivery.developmentStart || '待排期', end = delivery.developmentEnd || '待排期';
   const total = delivery.counts.total;
   const scheduled = Number(delivery.scheduledCount) || 0, unscheduled = Number(delivery.unscheduledCount) || 0;
-  const dates = total ? `${esc(start)} — ${esc(end)}` : '拆分任务后自动汇总';
+  const dates = total ? `<span>${scheduleDate(start)} — ${scheduleDate(end)}</span>` : '拆分任务后自动汇总';
   const coverage = total ? `${scheduled} / ${total} 项任务已排期${unscheduled ? `，${unscheduled} 项待补齐日期` : ''}` : '按有效任务的最早开始、最晚截止计算';
   const delay = !isClosed(requirement) && Number.isFinite(delivery.delayDays) && delivery.delayDays > 0 ? toneBadge('danger', `预计晚于承诺 ${delivery.delayDays} 天`) : '';
-  return `<dl class="task-group-schedule"><div><dt>研发周期</dt><dd>${dates}</dd><p>${esc(coverage)}</p></div><div><dt>承诺交付</dt><dd>${esc(requirement.planEnd || '未设置')}${delay ? `<span class="task-group-delay">${delay}</span>` : ''}</dd><p>${requirement.planEnd ? '保留需求承诺，不随任务日期覆盖' : '可在需求详情维护承诺日期'}</p></div></dl>`;
+  return `<dl class="task-group-schedule"><div><dt>研发周期</dt><dd>${dates}</dd><p>${esc(coverage)}</p></div><div><dt>承诺交付</dt><dd>${scheduleDate(requirement.planEnd || '未设置')}${delay ? `<span class="task-group-delay">${delay}</span>` : ''}</dd><p>${requirement.planEnd ? '保留需求承诺，不随任务日期覆盖' : '可在需求详情维护承诺日期'}</p></div></dl>`;
 }
 
 /**
@@ -46,10 +50,10 @@ export function renderRequirementTaskGroups({ requirements = [], tasks = [], use
     const editable = mayChange(requirement), manage = editable && readAccess(canManage, requirement, role), split = editable && readAccess(canSplit, requirement, role);
     const metadata = requirement.archived ? toneBadge('terminated', '已归档') : isEarly(requirement) ? toneBadge('review', '历史关联 · 待评估') : '';
     const owner = personChip(requirement.assigneeId, nameOf(requirement.assigneeId, users));
-    const actions = manage || split ? `<div class="task-group-actions">${manage ? button({ label: '研发设置', variant: 'text', iconName: 'edit', data: { manageDevelopment: requirement.id } }) : ''}<div class="task-group-create">${split ? `<details class="task-group-more"><summary aria-label="更多拆分方式">${icon('menu')}</summary><div class="task-group-more-menu">${button({ label: '批量拆分任务', variant: 'text', data: { batchRequirement: requirement.id } })}</div></details>${button({ label: '新建任务', variant: 'primary', size: 'small', iconName: 'plus', data: { linkedTask: requirement.id } })}` : ''}</div></div>` : '';
+    const actions = manage || split ? `<div class="task-group-actions">${manage ? button({ label: '研发设置', variant: 'text', size: 'touch', iconName: 'edit', data: { manageDevelopment: requirement.id } }) : ''}<div class="task-group-create">${split ? `<details class="task-group-more"><summary aria-label="更多拆分方式">${icon('menu')}</summary><div class="task-group-more-menu">${button({ label: '批量拆分任务', variant: 'text', size: 'touch', data: { batchRequirement: requirement.id } })}</div></details>${button({ label: '新建任务', variant: 'primary', size: 'small', touch: true, iconName: 'plus', data: { linkedTask: requirement.id } })}` : ''}</div></div>` : '';
     const context = `<details class="task-group-context"><summary>背景与验收</summary><div class="task-group-context-copy"><section><h4>背景与目标</h4><p>${esc(requirement.description || '尚未填写背景与目标。')}</p></section><section><h4>验收标准</h4><p>${esc(requirement.acceptance || '尚未填写验收标准。')}</p></section></div></details>`;
     const taskBody = visible.length ? `<div class="task-group-cards">${visible.map(task => renderTask(task)).join('')}</div>` : `<p class="task-group-empty">${linked.length ? '没有符合当前筛选的任务。' : split ? '尚未拆分任务。可从新建任务开始。' : '尚未拆分任务，等待主开发安排。'}</p>`;
-    return `<details class="requirement-task-group"${expanded.has(requirement.id) ? ' open' : ''}><summary class="task-group-summary" data-task-group="${esc(requirement.id)}"><span class="task-group-heading"><span class="task-group-title">${button({ label: requirement.title || '未命名需求', variant: 'text', data: { requirement: requirement.id } })}${badge(delivery.status)}${metadata}</span><span class="task-group-meta"><code>${esc(requirement.id)}</code><span>主责开发</span>${owner}</span></span><span class="task-group-progress">${delivery.counts.done} / ${delivery.counts.total}<small>有效任务完成</small>${visible.length !== linked.length ? `<small>当前显示 ${visible.length} 项</small>` : ''}</span><span class="task-group-chevron" aria-hidden="true">${icon('arrow')}</span></summary><div class="task-group-body">${scheduleSummary(requirement, delivery)}${context}${actions}${taskBody}</div></details>`;
+    return `<details class="requirement-task-group"${expanded.has(requirement.id) ? ' open' : ''}><summary class="task-group-summary" data-task-group="${esc(requirement.id)}"><span class="task-group-heading"><span class="task-group-title">${button({ label: requirement.title || '未命名需求', variant: 'text', size: 'touch', data: { requirement: requirement.id } })}${badge(delivery.status)}${metadata}</span><span class="task-group-meta"><code>${esc(requirement.id)}</code><span>主责开发</span>${owner}</span></span><span class="task-group-progress">${delivery.counts.done} / ${delivery.counts.total}<small>有效任务完成</small>${visible.length !== linked.length ? `<small>当前显示 ${visible.length} 项</small>` : ''}</span><span class="task-group-chevron" aria-hidden="true">${icon('arrow')}</span></summary><div class="task-group-body">${scheduleSummary(requirement, delivery)}${context}${actions}${taskBody}</div></details>`;
   });
   const orphans = visibleTasks.filter(task => !knownIds.has(task.requirementId));
   if (orphans.length) groups.push(`<details class="requirement-task-group"${expandedIds === undefined || expanded.has('__unlinked__') ? ' open' : ''}><summary class="task-group-summary" data-task-group="__unlinked__"><span class="task-group-heading"><strong>未关联或原需求不可用</strong><span class="task-group-meta">保留历史任务，关联信息可在任务详情核对。</span></span><span class="task-group-progress">${orphans.length}<small>项任务</small></span><span class="task-group-chevron" aria-hidden="true">${icon('arrow')}</span></summary><div class="task-group-body"><div class="task-group-cards">${orphans.map(task => renderTask(task)).join('')}</div></div></details>`);

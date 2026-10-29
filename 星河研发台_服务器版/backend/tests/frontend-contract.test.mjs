@@ -19,6 +19,9 @@ import * as requirementUI from '../../frontend/requirements-ui.js';
 import * as documentsUI from '../../frontend/documents-ui.js';
 import * as documentLinkFields from '../../frontend/document-link-fields.js';
 import * as uiKit from '../../frontend/ui-kit.js';
+import * as projectDirectoryUI from '../../frontend/project-directory.js';
+import * as workbenchModel from '../../frontend/workbench-model.js';
+import * as workbenchUI from '../../frontend/workbench-ui.js';
 import {webcrypto} from 'node:crypto';
 
 // This harness checks the actual frontend's rendering and request functions
@@ -42,10 +45,20 @@ async function fixture(t,{initialize=true,setupToken='',hash='#/team',recoveryLi
   }
   const elements=new Map(),listeners={};
   function element(key){if(!elements.has(key))elements.set(key,{innerHTML:'',dataset:{},hidden:false,open:false,value:'',disabled:false,style:{},classList:{add(){},remove(){},toggle(){}},addEventListener(){},querySelector:selector=>element(selector),querySelectorAll:()=>[],setAttribute(){},focus(){},select(){},click(){},showModal(){this.open=true;},close(){this.open=false;},getBoundingClientRect(){return{left:0,top:0,right:100,bottom:100};}});return elements.get(key);}
-  class MockForm {constructor(kind,entries,id=''){this.dataset={kind,id,projectId:'p-exec'};this.entries=Object.entries(entries);this.id='entity-form';}querySelector(selector){return element(selector);}}
+  class MockForm {
+    constructor(kind,entries,id='') {
+      this.dataset={kind,id,projectId:'p-exec'};this.entries=Object.entries(entries);this.id='entity-form';
+      // Capture the entity version when the form is created, never when it is saved.
+      if(id&&['projects','requirements','tasks'].includes(kind)) {
+        const item=vm.runInContext('data',context)[kind].find(record=>record.id===id);
+        if(item)this.dataset.version=String(item.version);
+      }
+    }
+    querySelector(selector){return element(selector);}
+  }
   class MockFormData {constructor(form){this.values=form.entries;}[Symbol.iterator](){return this.values[Symbol.iterator]();}getAll(key){return this.values.filter(entry=>entry[0]===key).map(entry=>entry[1]);}}
   const api=async(path,options={})=>{const result=await request('/api'+path,options);if(!result.ok)throw Object.assign(new Error(result.data.error),{status:result.status,code:result.data.code});return result.data;};
-  const context=vm.createContext({...uiKit,...taskGroupsUI,...requirementUI,...documentsUI,...documentLinkFields,...docSections,...portfolioUI,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,renderFeaturePreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,text:async()=>response.bytes.toString(),arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
+  const context=vm.createContext({...uiKit,...projectDirectoryUI,...workbenchModel,...workbenchUI,...taskGroupsUI,...requirementUI,...documentsUI,...documentLinkFields,...docSections,...portfolioUI,...workflow,...reviewUI,...batchUI,...workUI,renderDocumentPreview,renderFeaturePreview,crypto:webcrypto,sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}},createTimelineState,moveTimeline,renderTimeline,resolveTimelineRange,document:{querySelector:element,querySelectorAll:()=>[],addEventListener(name,fn){listeners[name]=fn;},visibilityState:'visible',body:element('body'),activeElement:element('active'),createElement:element},window:{addEventListener(){},scrollY:0,scrollTo(){}},location:{origin:'http://127.0.0.1:3000',pathname:'/',search:'',hash},history:{replaceState(_state,_title,url){const parsed=new URL(url,'http://127.0.0.1:3000');context.location.hash=parsed.hash;context.location.search=parsed.search;}},URL,URLSearchParams,TextDecoder,TextEncoder,Blob,Uint8Array,atob,btoa,console,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,requestAnimationFrame:fn=>fn(),navigator:{clipboard:{writeText:async()=>{}}},HTMLFormElement:MockForm,FormData:MockFormData,api,rows:(v,key)=>Array.isArray(v)?v:v?.[key]||[],setCsrf(value){csrf=value;},fetch:async(url,options={})=>{const response=await request(url,options);return {...response,json:async()=>response.data,text:async()=>response.bytes.toString(),arrayBuffer:async()=>response.bytes.buffer.slice(response.bytes.byteOffset,response.bytes.byteOffset+response.bytes.byteLength),blob:async()=>new Blob([response.bytes],{type:response.headers.get('content-type')})};}});
   const source=fs.readFileSync(new URL('../../frontend/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace(/\nboot\(\);\s*$/,'');
   vm.runInContext(source,context);
   if(admin){
@@ -83,9 +96,9 @@ test('团队待办排除已终止任务与归档项目，完成率明确使用�
     {id:'archived-test',projectId:'p-res',ownerId:'u-manager',title:'已归档项目的工作',status:'待开始',dueDate:'2020-01-01'}
   ];
   f.run('data.tasks=fixtureTasks;data.projects.find(p=>p.id==="p-res").archived=true;route={view:"team",projectId:""};');
-  const team=f.run('teamView()');
+  const team=f.run('teamView(false,{date:today(),personal:{tasks:data.tasks,splits:[],reviews:[]},reminders:[]})');
   assert.match(team,/仍需完成的工作/);assert.doesNotMatch(team,/不应出现在待办的已终止任务|已归档项目的工作/);
-  assert.match(team,/未完成且未终止的任务/);
+  assert.match(team,/待我处理/);
   f.run('route={view:"overview",projectId:"p-exec"};');
   const overview=f.run('overviewView()');
   assert.doesNotMatch(overview,/不应出现在待办的已终止任务/);assert.match(overview,/非终止任务/);
@@ -102,6 +115,97 @@ test('项目卡显示负责人和完成率口径，空项目不显示虚构百�
   f.run('route.view="tasks";renderShell();');
   assert.match(f.element('#app').innerHTML,/aria-label="搜索任务"/);
   assert.match(f.element('#app').innerHTML,/aria-label="项目空间"/);
+});
+
+test('登录页无项目菜单时键盘输入不被拦截，隐藏菜单也不处理导航键',async t=>{
+  const f=await fixture(t,{initialize:false});
+  const query=f.context.document.querySelector;
+  f.context.document.querySelector=selector=>selector==='#project-menu'?null:query(selector);
+  f.context.document.activeElement={tagName:'INPUT'};
+  for(const key of ['a','/','Tab','Escape','ArrowDown','ArrowUp','Home','End']){
+    let prevented=false;const event={key,preventDefault(){prevented=true;}};
+    assert.doesNotThrow(()=>f.listeners.keydown(event));
+    assert.equal(prevented,false,`无项目菜单时不应阻止 ${key}`);
+    f.context.menuKeyEvent=event;
+    assert.equal(f.run('projectMenuKey(menuKeyEvent)'),false);
+  }
+  f.context.document.querySelector=query;
+  f.element('#project-menu').hidden=true;
+  f.element('#project-menu').querySelectorAll=()=>{throw new Error('隐藏菜单不应读取选项');};
+  let prevented=false;f.context.menuKeyEvent={key:'ArrowDown',preventDefault(){prevented=true;}};
+  assert.doesNotThrow(()=>f.listeners.keydown(f.context.menuKeyEvent));
+  assert.equal(f.run('projectMenuKey(menuKeyEvent)'),false);
+  assert.equal(prevented,false);
+});
+
+test('展开的项目菜单保留方向键循环、首尾定位、退出和正常制表键行为',async t=>{
+  const f=await fixture(t);
+  const menu=f.element('#project-menu'),toggle=f.element('#project-switch');
+  const items=Array.from({length:3},()=>({focus(){f.context.document.activeElement=this;}}));
+  menu.querySelectorAll=()=>items;menu.hidden=false;
+  f.context.document.activeElement=items[0];
+  const keydown=key=>{let prevented=false;f.listeners.keydown({key,preventDefault(){prevented=true;}});return prevented;};
+  assert.equal(keydown('ArrowDown'),true);assert.equal(f.context.document.activeElement,items[1]);
+  assert.equal(keydown('End'),true);assert.equal(f.context.document.activeElement,items[2]);
+  assert.equal(keydown('ArrowDown'),true);assert.equal(f.context.document.activeElement,items[0]);
+  assert.equal(keydown('ArrowUp'),true);assert.equal(f.context.document.activeElement,items[2]);
+  assert.equal(keydown('Home'),true);assert.equal(f.context.document.activeElement,items[0]);
+  toggle.focus=()=>{f.context.document.activeElement=toggle;};
+  assert.equal(keydown('Escape'),true);assert.equal(menu.hidden,true);assert.equal(f.context.document.activeElement,toggle);
+  menu.hidden=false;f.context.document.activeElement=items[0];
+  assert.equal(keydown('Tab'),false);assert.equal(menu.hidden,true);assert.equal(f.context.document.activeElement,items[0]);
+});
+
+test('项目目录两种显示共用全文搜索、归档范围和任务统计，切换不改筛选或工作台',async t=>{
+  const f=await fixture(t);
+  f.context.directoryFixture=JSON.stringify({
+    projects:[{id:'p-exec',name:'当前项目',description:'说明命中资源关键字',status:'进行中'},{id:'p-empty',name:'空项目',description:'另一个项目'},{id:'p-res',name:'归档项目',description:'归档也命中资源关键字',archived:true}],
+    requirements:[{id:'confirmed',projectId:'p-exec',status:'已确定'},{id:'proposal',projectId:'p-exec',status:'未确定'},{id:'archived',projectId:'p-exec',status:'已完成',archived:true}],
+    tasks:[{id:'done',projectId:'p-exec',status:'已完成'},{id:'wait',projectId:'p-exec',status:'wait'},{id:'closed',projectId:'p-exec',status:'已终止'},{id:'old',projectId:'p-exec',status:'已完成',archived:true}]
+  });
+  f.run('Object.assign(data,JSON.parse(directoryFixture));route={view:"projects",projectId:""};');
+  const ids=html=>[...html.matchAll(/href="#\/p\/([^"/]+)\/overview"/g)].map(match=>match[1]);
+  const teamBefore=f.run('teamView(false)');
+  const cards=f.run('teamView(true)');
+  assert.deepEqual(ids(cards),['p-exec','p-empty']);
+  assert.match(cards,/50% · 1 \/ 2/);assert.match(cards,/1 项需求 · 3 个任务/);
+  assert.match(cards,/data-project-layout="card" aria-pressed="true"/);
+  const requests=[];f.context.api=async(...args)=>{requests.push(args);throw new Error('显示切换不应请求后端');};
+  const click=async value=>{const target={dataset:{projectLayout:value},disabled:false,setAttribute(){}};await f.listeners.click({target:{closest:()=>target}});};
+  await click('list');
+  const list=f.element('#view').innerHTML;
+  assert.deepEqual(ids(list),ids(cards));assert.match(list,/50% · 1 \/ 2/);assert.match(list,/1 项 \/ 3 个/);
+  assert.match(list,/暂无任务/);assert.equal(f.run('teamView(false)'),teamBefore);
+  f.run('ui.search="资源关键字";ui.page=3;');
+  const before=f.run('JSON.stringify(ui)');
+  await click('card');assert.equal(f.run('JSON.stringify(ui)'),before);
+  assert.deepEqual(ids(f.element('#view').innerHTML),['p-exec']);
+  f.run('ui.archived=true;');
+  const archivedBefore=f.run('JSON.stringify(ui)');
+  await click('list');assert.equal(f.run('JSON.stringify(ui)'),archivedBefore);
+  assert.deepEqual(ids(f.element('#view').innerHTML),['p-res']);
+  assert.match(f.element('#view').innerHTML,/已归档项目/);
+  f.run('ui.search="不存在的关键词";');
+  assert.match(f.run('teamView(true)'),/没有符合条件的项目/);
+  f.run('ui.search="";data.projects=data.projects.filter(project=>!project.archived);');
+  const noArchive=f.run('teamView(true)');assert.match(noArchive,/暂无归档项目/);assert.doesNotMatch(noArchive,/创建第一个项目|还没有可访问的项目/);
+  assert.deepEqual(requests,[]);
+});
+
+test('项目目录卡片与列表沿用服务器授权项目和角色，不给成员新增管理操作',async t=>{
+  const f=await fixture(t);await f.become('u-dev1');
+  f.run('route={view:"projects",projectId:""};');
+  const expected=JSON.parse(f.run('JSON.stringify(data.projects.filter(project=>!project.archived).map(project=>project.id))'));
+  assert.ok(expected.length>0);
+  const directory=layout=>{f.context.directoryLayout=layout;f.run('projectLayoutPreferences.set(user.id,directoryLayout);');return f.run('teamView(true)');};
+  for(const layout of ['card','list']){
+    const html=directory(layout);
+    assert.deepEqual([...html.matchAll(/href="#\/p\/([^"/]+)\/overview"/g)].map(match=>match[1]),expected);
+    assert.doesNotMatch(html,/data-action="new-project"|data-action="edit-project"/);
+    assert.match(html,/我的角色/);
+  }
+  f.run('user={id:"different-account",role:"viewer"};');
+  assert.match(f.run('teamView(true)'),/data-project-layout="card" aria-pressed="true"/);
 });
 
 test('排期页面接通全局视图、缩放档位、自定义日期与独立项目状态，切换项目保留排期设置',async t=>{
@@ -484,6 +588,256 @@ test('自动同步：只读页面拉取他人修改后重绘，打开弹窗或�
   f.element('active').tagName='INPUT';assert.equal(f.run('canAutoRefresh()'),false);
 });
 
+function deferredResponse() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function holdWorkspaceResponses(f) {
+  const requests = [];
+  const original = f.context.api;
+  f.context.api = (path, options) => {
+    if (!path.startsWith('/bootstrap')) return original(path, options);
+    const request = deferredResponse();
+    requests.push(request);
+    return request.promise;
+  };
+  return requests;
+}
+
+const versionedEntityCases = [
+  { kind: 'projects', editor: 'editProject', update: 'updateProject', get: 'getProject', title: 'name' },
+  { kind: 'requirements', editor: 'editRequirement', update: 'updateRequirement', get: 'getRequirement', title: 'title' },
+  { kind: 'tasks', editor: 'editTask', update: 'updateTask', get: 'getTask', title: 'title' },
+];
+
+function editableEntityForm(f, kind, item, description) {
+  let fields;
+  if (kind === 'projects') fields = {
+    name: item.name, description, ownerId: item.ownerId, status: item.status,
+    startDate: item.startDate || '', targetDate: item.targetDate || '',
+    milestones: (item.milestones || []).map(mark => `${mark.name || mark.label} | ${mark.date || ''}`).join('\n'),
+  };
+  else if (kind === 'requirements') fields = {
+    title: item.title, description, acceptance: item.acceptance || '', priority: item.priority,
+    assigneeId: item.assigneeId || '', estimatePoints: item.estimatePoints || 0,
+    planStart: item.planStart || '', planEnd: item.planEnd || '', source: item.source || '',
+  };
+  else fields = {
+    title: item.title, description, requirementId: item.requirementId, ownerId: item.ownerId,
+    status: f.run('taskStage')(item.status), startDate: item.startDate || '', dueDate: item.dueDate || '', estimateHours: item.estimateHours || 0,
+  };
+  const form = new f.MockForm(kind, fields, item.id);
+  for (const key of ['dependencyIds', 'collaboratorIds']) for (const id of item[key] || []) form.entries.push([key, id]);
+  // Verify the actual rendered form carries the same captured version as the DOM double.
+  const emitted = /<form[^>]*data-version="([^"]*)"/.exec(f.element('#dialog').innerHTML)?.[1];
+  assert.equal(emitted, String(item.version));
+  assert.equal(form.dataset.version, emitted);
+  return form;
+}
+
+for (const definition of versionedEntityCases) test(`${definition.kind} 旧表单遇在途刷新仍拒绝覆盖他人数据，重新打开后可正常保存`, async t => {
+  for (const source of ['automatic', 'manual']) {
+    const f = await fixture(t), { kind, editor, update, get, title } = definition;
+    f.run('route={view:"overview",projectId:"p-exec"};renderShell();');
+    f.element('#project-menu').hidden = true;
+    const actor = f.run('user');
+    const entity = f.run('data')[kind].find(item => (kind === 'projects' ? item.id === 'p-exec' : item.projectId === 'p-exec') && !item.archived && (kind !== 'requirements' || !['未确定', '待评审'].includes(item.status)));
+    const before = f.app.business[get](actor, entity.id);
+    const originalApi = f.context.api, requests = holdWorkspaceResponses(f);
+    const refreshing = source === 'automatic' ? f.run('autoRefresh()') : f.run('reload()');
+    f.context.editingEntityId = before.id;
+    f.run(`${editor}(editingEntityId)`);
+    const formHtml = f.element('#dialog').innerHTML;
+    f.context.staleEntityForm = editableEntityForm(f, kind, before, '本次仅修改说明');
+    const after = f.app.business[update](actor, before.id, { version: before.version, [title]: '同事刚保存的新标题' });
+    requests[0].resolve(await originalApi('/bootstrap?includeArchived=1'));
+    await refreshing;
+    assert.equal(f.element('#dialog').innerHTML, formHtml, '刷新不能重置正在填写的表单');
+    assert.equal(f.context.staleEntityForm.dataset.version, String(before.version));
+    f.context.api = originalApi;
+    await assert.rejects(f.run('saveEntity(staleEntityForm)'), { code: 'VERSION_CONFLICT' }, `${source} 刷新后必须保留原表单的版本校验`);
+    const saved = f.app.business[get](actor, before.id);
+    assert.equal(saved.version, after.version);
+    assert.equal(saved[title], after[title]);
+    assert.equal(saved.description, after.description);
+    assert.equal(f.element('#dialog').open, true, '冲突保留表单和未保存输入');
+    await f.run('reload()');
+    f.run(`${editor}(editingEntityId)`);
+    f.context.freshEntityForm = editableEntityForm(f, kind, saved, '核对后保存的说明');
+    await f.run('saveEntity(freshEntityForm)');
+    const updated = f.app.business[get](actor, before.id);
+    assert.equal(updated[title], after[title]);
+    assert.equal(updated.description, '核对后保存的说明');
+    assert.ok(updated.version > after.version);
+  }
+});
+
+test('已有项目需求和任务缺少或携带无效表单版本时不发起写请求', async t => {
+  const f = await fixture(t);
+  for (const { kind, editor } of versionedEntityCases) {
+    const item = f.run('data')[kind].find(item => (kind === 'projects' ? item.id === 'p-exec' : item.projectId === 'p-exec') && !item.archived);
+    f.context.editingEntityId = item.id;
+    f.run(`${editor}(editingEntityId)`);
+    const form = editableEntityForm(f, kind, item, item.description || '');
+    let calls = 0;
+    f.context.api = () => { calls++; throw new Error('无效版本不应发请求'); };
+    f.context.invalidVersionForm = form;
+    for (const value of [undefined, '', '0', '-1', '1.5', 'not-a-version', '9007199254740992']) {
+      if (value === undefined) delete form.dataset.version; else form.dataset.version = value;
+      await assert.rejects(f.run('saveEntity(invalidVersionForm)'), /编辑版本缺失或无效/);
+    }
+    const collections = f.run('data'), before = collections[kind];
+    collections[kind] = before.filter(record => record.id !== item.id);
+    delete form.dataset.version;
+    try { await assert.rejects(f.run('saveEntity(invalidVersionForm)'), /编辑版本缺失或无效/, '记录从当前集合消失后仍不能跳过版本校验'); }
+    finally { collections[kind] = before; }
+    assert.equal(calls, 0);
+  }
+});
+
+test('保存后的刷新发起新请求，较晚到达的旧快照不覆盖项目和同步标记', async t => {
+  const f = await fixture(t);
+  const before = await f.api('/bootstrap?includeArchived=1');
+  const requests = holdWorkspaceResponses(f);
+  const earlier = assert.rejects(f.run('reload()'), { code: 'STALE_REFRESH' });
+  const actor = f.run('user');
+  const project = f.app.business.getProject(actor, 'p-exec');
+  f.app.business.updateProject(actor, project.id, { version: project.version, name: '保存后的项目名称' });
+  const after = await f.api('/bootstrap?includeArchived=1');
+  const latest = f.run('reload()');
+  assert.equal(requests.length, 2, '保存后不能复用保存前的请求');
+  requests[1].resolve(after);
+  await latest;
+  const signature = f.run('dataSignature'), synced = f.run('lastSynced');
+  requests[0].resolve(before);
+  await earlier;
+  assert.equal(f.run('projectOf("p-exec").name'), '保存后的项目名称');
+  assert.equal(f.run('dataSignature'), signature);
+  assert.equal(f.run('lastSynced'), synced);
+  assert.equal(f.run('pendingReload'), null);
+});
+
+test('前台刷新进行中自动同步不插队，最新请求失败也不接受旧快照', async t => {
+  const f = await fixture(t);
+  f.run('route={view:"overview",projectId:"p-exec"};renderShell();');
+  f.element('#project-menu').hidden = true;
+  const snapshot = await f.api('/bootstrap?includeArchived=1');
+  const requests = holdWorkspaceResponses(f);
+  const earlier = assert.rejects(f.run('reload()'), { code: 'STALE_REFRESH' });
+  await f.run('autoRefresh()');
+  assert.equal(requests.length, 1);
+  const latest = assert.rejects(f.run('reload()'), /模拟网络失败/);
+  requests[1].reject(new Error('模拟网络失败'));
+  await latest;
+  requests[0].resolve(snapshot);
+  await earlier;
+  assert.equal(f.run('lastSynced'), 0);
+  assert.equal(f.run('dataSignature'), '');
+  assert.equal(f.run('pendingReload'), null);
+});
+
+test('已被替代的悬挂请求不阻止新快照之后的自动同步', async t => {
+  for (const source of ['manual', 'automatic']) {
+    const f = await fixture(t);
+    f.run('route={view:"overview",projectId:"p-exec"};renderShell();');
+    f.element('#project-menu').hidden = true;
+    const snapshot = await f.api('/bootstrap?includeArchived=1');
+    const requests = holdWorkspaceResponses(f);
+    const earlier = source === 'manual'
+      ? assert.rejects(f.run('reload()'), { code: 'STALE_REFRESH' })
+      : f.run('autoRefresh()');
+    const latest = f.run('reload()');
+    requests[1].resolve(snapshot);
+    await latest;
+    const automatic = f.run('autoRefresh()');
+    assert.equal(requests.length, 3, '已过期但未完成的请求不能锁住后续同步');
+    requests[2].resolve(snapshot);
+    await automatic;
+    requests[0].resolve(snapshot);
+    await earlier;
+    assert.equal(f.run('pendingReload'), null);
+  }
+});
+
+test('退出后迟到的工作区响应不更新数据或同步标记', async t => {
+  const f = await fixture(t);
+  const snapshot = await f.api('/bootstrap?includeArchived=1');
+  snapshot.projects.find(project => project.id === 'p-exec').name = '退出后不应显示';
+  const requests = holdWorkspaceResponses(f);
+  const pending = assert.rejects(f.run('reload()'), { code: 'STALE_REFRESH' });
+  f.run('user=null;renderAuth();');
+  const loginHtml = f.element('#app').innerHTML;
+  requests[0].resolve(snapshot);
+  await pending;
+  assert.equal(f.run('user'), null);
+  assert.notEqual(f.run('projectOf("p-exec").name'), '退出后不应显示');
+  assert.equal(f.run('lastSynced'), 0);
+  assert.equal(f.element('#app').innerHTML, loginHtml);
+});
+
+test('同账号新会话不受旧刷新成功或旧认证错误影响', async t => {
+  for (const outcome of ['success', 'unauthorized']) {
+    const f = await fixture(t);
+    const snapshot = await f.api('/bootstrap?includeArchived=1');
+    const requests = holdWorkspaceResponses(f);
+    const pending = f.run('reload().catch(error=>{presentError(error);return error.code;})');
+    f.run('user={...user};renderShell();');
+    const currentUser = f.run('user'), currentHtml = f.element('#app').innerHTML;
+    if (outcome === 'success') requests[0].resolve(snapshot);
+    else requests[0].reject(Object.assign(new Error('旧会话已结束'), { status: 401 }));
+    assert.equal(await pending, 'STALE_REFRESH');
+    assert.equal(f.run('user'), currentUser);
+    assert.equal(f.element('#app').innerHTML, currentHtml);
+    assert.equal(f.run('lastSynced'), 0);
+  }
+});
+
+test('切换账号后不应用旧账号的完整工作区数据', async t => {
+  const f = await fixture(t);
+  const snapshot = await f.api('/bootstrap?includeArchived=1');
+  const requests = holdWorkspaceResponses(f);
+  const pending = assert.rejects(f.run('reload()'), { code: 'STALE_REFRESH' });
+  await f.become('u-dev1');
+  const state = f.run('JSON.stringify(data)'), currentUser = f.run('user');
+  requests[0].resolve(snapshot);
+  await pending;
+  assert.equal(f.run('JSON.stringify(data)'), state);
+  assert.equal(f.run('user'), currentUser);
+});
+
+test('任务列表不生成隐藏的看板卡片，切回看板仍显示全部筛选任务', async t => {
+  const f = await fixture(t);
+  f.run('route={view:"tasks",projectId:"p-exec"};ui.taskLayout="list";');
+  const originalCard = f.run('taskCard');
+  let cardCalls = 0;
+  f.context.cardSpy = task => { cardCalls++; return originalCard(task); };
+  f.run('taskCard=cardSpy;');
+  const list = f.run('tasksView()');
+  assert.match(list, /data-table/);
+  assert.equal(cardCalls, 0, '列表不能生成未显示的看板卡片');
+  const expected = f.run('filtered("tasks").length');
+  f.run('ui.taskLayout="board";');
+  const board = f.run('tasksView()');
+  assert.match(board, /class="board"/);
+  assert.equal(cardCalls, expected);
+});
+
+test('工作台迟到响应不能跨越同账号的新会话重新绘制页面', async t => {
+  const f = await fixture(t);
+  const work = deferredResponse();
+  f.context.api = () => work.promise;
+  f.run('route={view:"personal",projectId:""};');
+  const pending = f.run('workView()');
+  f.run('user={...user};');
+  f.element('#view').innerHTML = '新会话页面';
+  work.resolve({});
+  await pending;
+  assert.equal(f.element('#view').innerHTML, '新会话页面');
+  assert.equal(f.run('workSnapshot'), null);
+});
+
 test('主开发编辑转派并查看修改记录，只有管理员看到删除入口且可确认删除恢复',async t=>{
   const f=await fixture(t),admin=f.run('user');
   const project=f.app.business.getProject(admin,'p-exec');
@@ -728,4 +1082,80 @@ test('提议与需求共用文档选择器，确认转入保留关联并同步�
   f.context.form=reqForm;await f.run('saveEntity(form)');
   const cleared=f.app.business.getRequirement(admin,converted.id);assert.equal(cleared.docRefs.length,0);
   f.run('ui.documentConfirmation="unlinked";');assert.match(f.run('documentsView()'),/文档联动测试/);
+});
+
+
+test('工作台复用工作服务并隔离搜索、目录偏好和业务数据，关注事项可打开原详情',async t=>{
+  const f=await fixture(t);f.run('route={view:"team",projectId:""};');
+  const before=f.run('JSON.stringify(data)');
+  const requests=[];
+  f.context.api=async(...args)=>{requests.push(args);return f.api(...args);};
+  await f.run('loadWorkbench()');
+  assert.equal(requests.filter(([url])=>url.startsWith('/work?')).length,1);
+  assert.equal(f.run('JSON.stringify(data)'),before);
+  assert.match(f.element('#view').innerHTML,/项目推进|待我处理/);
+  assert.doesNotMatch(f.element('#view').innerHTML,/class="project-card"/);
+  const metrics=f.run('JSON.stringify(buildWorkbench({data,user,date:today(),work:currentWorkbenchWork()}).metrics)');
+  f.run('ui.search="不会匹配的项目";renderView();');
+  await f.run('loadWorkbench()');
+  assert.equal(requests.filter(([url])=>url.startsWith('/work?')).length,1);
+  assert.equal(f.run('JSON.stringify(buildWorkbench({data,user,date:today(),work:currentWorkbenchWork()}).metrics)'),metrics);
+  assert.match(f.element('#view').innerHTML,/没有符合|没有匹配|未找到/);
+  f.run('openWorkbenchRisk("p-exec")');
+  assert.match(f.element('#dialog').innerHTML,/项目推进与关注事项/);
+  assert.doesNotMatch(f.element('#dialog').innerHTML,/data-archive|type="submit"/);
+  assert.ok(requests.every(([,options])=>!options?.method||options.method==='GET'));
+});
+
+test('工作台载入失败不伪装零待办，重试恢复；迟到响应不能覆盖其他页面或账号',async t=>{
+  const f=await fixture(t);f.run('route={view:"team",projectId:""};');
+  f.context.api=async()=>{throw new Error('测试网络中断');};
+  await f.run('loadWorkbench()');
+  assert.equal(f.run('currentWorkbenchWork()'),null);
+  assert.equal(f.run('currentWorkbenchError()'),true);
+  assert.match(f.element('#view').innerHTML,/data-action="refresh-workbench"/);
+  assert.match(f.element('#view').innerHTML,/—/);
+  f.context.api=f.api;
+  await f.run('loadWorkbench(true)');
+  assert.equal(f.run('currentWorkbenchError()'),false);
+  assert.ok(f.run('currentWorkbenchWork()'));
+  let resolveRequest;
+  f.context.api=()=>new Promise(resolve=>{resolveRequest=resolve;});
+  const pending=f.run('loadWorkbench(true)');
+  f.run('route={view:"projects",projectId:""};');
+  f.element('#view').innerHTML='保留项目目录';
+  resolveRequest({date:f.run('today()'),personal:{tasks:[],splits:[],reviews:[]},reminders:[]});
+  await pending;
+  assert.equal(f.element('#view').innerHTML,'保留项目目录');
+  f.run('route={view:"team",projectId:""};');
+  const oldSession=f.run('loadWorkbench(true)');
+  f.run('user={...user,id:"new-account"};');
+  f.element('#view').innerHTML='新账号页面';
+  resolveRequest({date:f.run('today()'),personal:{tasks:[{id:'secret-old-task'}]},reminders:[]});
+  await oldSession;
+  assert.equal(f.element('#view').innerHTML,'新账号页面');
+  assert.equal(f.run('currentWorkbenchWork()'),null);
+});
+
+test('六项需求最终验收可从工作台完整待办抽屉全部进入原详情',async t=>{
+  const f=await fixture(t);
+  f.run(`
+    route={view:'team',projectId:''};
+    user={id:'reviewer',role:'member',name:'测试人员'};
+    data={projects:[{id:'p',name:'验收项目'}],memberships:[{userId:user.id,projectId:'p',role:'tester'}],users:[],documents:[],
+      requirements:Array.from({length:6},(_,i)=>({id:'r'+i,projectId:'p',title:'需求验收'+i,status:'测试中',assigneeId:'dev',acceptance:'通过验收'})),
+      tasks:Array.from({length:6},(_,i)=>({id:'t'+i,projectId:'p',requirementId:'r'+i,title:'已完成任务'+i,ownerId:'dev',status:'已完成'}))};
+    workbenchState={actor:user,data,date:today(),error:false,pending:null,result:{date:today(),personal:{tasks:[],splits:[],reviews:[]},
+      reminders:data.requirements.map(item=>({entityType:'requirement',entityId:item.id,kind:'review'}))}};
+  `);
+  const before=f.run('JSON.stringify(data)');
+  const page=f.run('teamView()');
+  assert.match(page,/查看全部 6 项/);
+  assert.equal((page.match(/data-requirement="r\d"/g)||[]).length,5);
+  const control=f.element('workbench-todos-control');control.dataset={action:'workbench-todos'};
+  await f.listeners.click({target:{closest:selector=>selector==='button,[data-action]'?control:null},preventDefault(){}});
+  const drawer=f.element('#dialog').innerHTML;
+  for(let i=0;i<6;i++)assert.match(drawer,new RegExp(`data-requirement="r${i}"`));
+  assert.doesNotMatch(drawer,/type="submit"|data-archive/);
+  assert.equal(f.run('JSON.stringify(data)'),before);
 });

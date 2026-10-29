@@ -135,8 +135,8 @@ export function requirementDeliveryState(requirement, tasks = [], dependencies =
   if (requirement.workflowHold) gates.push('需求已重新打开，请安排返工任务');
   let status = requirement.status;
   const enabled = DELIVERY_REQUIREMENT_STATUSES.includes(status);
-  // Historical rows keep their displayed state until the first relevant write
-  // adopts automatic delivery. Reads never silently rewrite their history.
+  // Startup reconciliation or a relevant write adopts automatic delivery for
+  // historical rows. Reads never silently rewrite their history.
   if (enabled && requirement.deliveryWorkflow === true && !requirement.archived && !['已完成', '已终止'].includes(status)) {
     if (hasStarted) status = liveTasks.length && counts.test + counts.done === counts.total && hasText(requirement.acceptance) && !requirement.workflowHold ? '测试中' : '开发中';
     else status = !planReady ? '已确定' : scheduleReady ? '已排期' : '待排期';

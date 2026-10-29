@@ -65,7 +65,7 @@ test('提议与确认需求共用核心内容结构，确认与审批要求完�
 
 test('提议详情保留历史和原有资料入口，转出需求与提议明确关联', () => {
   const html = renderProposalDetails({ ...proposal, status: '已转需求', requirementId: 'req-1', legacyRequirementId: 'old-req-1' });
-  assert.match(html, /^<div class="dialog-body">/);
+  assert.match(html, /^<div class="dialog-body" data-proposal-id="proposal-1">/);
   assert.match(html, /id="proposal-history" aria-live="polite"/);
   assert.match(html, /data-requirement="req-1"/);
   assert.match(html, /data-requirement="old-req-1"/);
@@ -159,19 +159,24 @@ test('研发周期由任务日期汇总，需求承诺保留并提示延期', ()
   const item = { ...requirement, planStart: '2026-09-01', planEnd: '2026-10-05' };
   const html = renderDeliveryWorkflow(item, { tasks: [task], role: 'lead' });
   assert.match(html, /研发周期（任务汇总）/);
-  assert.match(html, /2026-09-28 — 2026-10-10/);
+  assert.match(html.replace(/<[^>]*>/g, ''), /2026-09-28 — 2026-10-10/);
+  for (const value of ['2026-09-28', '2026-10-10', '2026-10-05']) assert.ok(html.includes(`<time datetime="${value}">${value}</time>`));
   assert.match(html, /承诺交付[\s\S]*2026-10-05/);
   assert.match(html, /晚于承诺 5 天/);
   const unscheduled = renderDeliveryWorkflow(item, { tasks: [{ ...task, dueDate: '' }], role: 'lead' });
   assert.match(unscheduled, /为研发任务排期/);
   assert.match(unscheduled, /还有 1 项有效任务需要补齐开始和截止日期/);
   assert.doesNotMatch(unscheduled, /补齐需求排期|研发计划已提交/);
+  const unsafeDate = renderDeliveryWorkflow({ ...item, planEnd: '<img src=x onerror=alert(1)>' });
+  assert.doesNotMatch(unsafeDate, /<img\b/);
+  assert.match(unsafeDate, /&lt;img/);
 });
 
 test('完成或终止需求不再展示预计延期，仍保留两套日期', () => {
   for (const status of ['已完成', '已终止']) {
     const html = renderDeliveryWorkflow({ ...requirement, status, planEnd: '2026-10-05' }, { tasks: [{ ...task, status: 'done', completedAt: '2026-09-28T08:00:00Z' }] });
-    assert.match(html, /2026-09-28 — 2026-10-10/);
+    assert.match(html.replace(/<[^>]*>/g, ''), /2026-09-28 — 2026-10-10/);
+    for (const value of ['2026-09-28', '2026-10-10', '2026-10-05']) assert.ok(html.includes(`<time datetime="${value}">${value}</time>`));
     assert.match(html, /承诺交付[\s\S]*2026-10-05/);
     assert.doesNotMatch(html, /预计研发截止晚于承诺/);
   }

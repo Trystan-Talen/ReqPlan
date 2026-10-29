@@ -63,3 +63,152 @@ jobs:
           BACKUP_ENABLED: '0'
           DATABASE_PATH: ':memory:'
         run: npm test
+      - name: 检查 CLI 源文件语法
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {execFileSync} from 'node:child_process';
+          for(const root of ['CLI/xinghe-cli/src','CLI/xinghe-cli/bin']){
+            function check(directory){
+              for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+                const file=path.join(directory,entry.name);
+                if(entry.isDirectory())check(file);
+                else if(/\.m?js$/.test(entry.name))execFileSync(process.execPath,['--check',file],{stdio:'inherit'});
+              }
+            }
+            check(root);
+          }
+          NODE
+      - name: 运行 CLI 隔离测试
+        working-directory: CLI/xinghe-cli
+        run: npm test
+      - name: 运行真实端口的隔离接口测试
+        working-directory: ${{ steps.locate.outputs.directory }}
+        env:
+          NODE_ENV: test
+          BACKUP_ENABLED: '0'
+          DATABASE_PATH: ':memory:'
+          XINGHE_HTTP_SOCKET: '1'
+        run: node --test backend/tests/http.test.mjs
+      - name: 构建接口镜像并检查临时实例健康状态
+        working-directory: ${{ steps.locate.outputs.directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --file deploy/api.Dockerfile --tag xinghe-api:ci .
+          container=$(docker run --detach --network none --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --env PUBLIC_ORIGIN=https://ci.example.invalid \
+            --env DATABASE_PATH=:memory: --env BACKUP_ENABLED=0 xinghe-api:ci)
+          cleanup() {
+            docker logs "$container"
+            docker rm --force "$container" >/dev/null
+          }
+          trap cleanup EXIT
+          for attempt in {1..20}; do
+            if docker exec "$container" node --input-type=module --eval '
+              const response = await fetch("http://127.0.0.1:3001/api/health", {signal: AbortSignal.timeout(2000)});
+              if (!response.ok || (await response.json()).status !== "ok") process.exit(1);
+            '; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          exit 1
+      - name: 构建网页镜像并核验代理与全部前端资源
+        working-directory: ${{ steps.locate.outputs.directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --file deploy/web.Dockerfile --tag xinghe-web:ci .
+          network="xinghe-web-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          api_container=''
+          web_container=''
+          network_created=0
+          cleanup() {
+            verification_status=$?
+            trap - EXIT
+            for container in "$web_container" "$api_container"; do
+              if [[ -n "$container" ]]; then
+                docker logs "$container" || true
+                docker rm --force "$container" >/dev/null || true
+              fi
+            done
+            if [[ "$network_created" == 1 ]]; then
+              docker network rm "$network" >/dev/null || true
+            fi
+            exit "$verification_status"
+          }
+          trap cleanup EXIT
+          docker network create "$network" >/dev/null
+          network_created=1
+          api_container=$(docker run --detach --network "$network" --network-alias api \
+            --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges:true \
+            --env PUBLIC_ORIGIN=https://ci.example.invalid \
+            --env DATABASE_PATH=:memory: --env BACKUP_ENABLED=0 xinghe-api:ci)
+          api_ready=0
+          for attempt in {1..20}; do
+            if docker exec "$api_container" node --input-type=module --eval '
+              const response = await fetch("http://127.0.0.1:3001/api/health", {signal: AbortSignal.timeout(2000)});
+              if (!response.ok || (await response.json()).status !== "ok") process.exit(1);
+            '; then
+              api_ready=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "$api_ready" != 1 ]]; then
+            exit 1
+          fi
+          web_container=$(docker run --detach --network "$network" \
+            --publish 127.0.0.1::8080 --read-only --tmpfs /tmp \
+            --cap-drop ALL --security-opt no-new-privileges:true xinghe-web:ci)
+          web_address=$(docker port "$web_container" 8080/tcp)
+          XINGHE_CI_WEB_ORIGIN="http://$web_address" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import fs from 'node:fs/promises';
+          import path from 'node:path';
+          import {setTimeout as delay} from 'node:timers/promises';
+
+          const origin = new URL(process.env.XINGHE_CI_WEB_ORIGIN);
+          assert.equal(origin.hostname, '127.0.0.1');
+          let healthy = false;
+          for (let attempt = 0; attempt < 40; attempt++) {
+            try {
+              const response = await fetch(new URL('/api/health', origin), {signal: AbortSignal.timeout(2000)});
+              healthy = response.ok && (await response.json()).status === 'ok';
+            } catch {}
+            if (healthy) break;
+            await delay(250);
+          }
+          assert(healthy, '网页容器未成功代理接口健康检查');
+
+          const root = path.resolve('frontend');
+          const files = [];
+          async function collect(directory) {
+            for (const entry of await fs.readdir(directory, {withFileTypes: true})) {
+              const file = path.join(directory, entry.name);
+              if (entry.isDirectory()) await collect(file);
+              else {
+                assert(entry.isFile(), `前端包含非普通文件：${file}`);
+                files.push(file);
+              }
+            }
+          }
+          await collect(root);
+          assert(files.length > 0, '前端资源目录为空');
+          const sha256 = value => createHash('sha256').update(value).digest('hex');
+          for (const file of files.sort()) {
+            const relative = path.relative(root, file).split(path.sep).join('/');
+            const route = '/' + relative.split('/').map(encodeURIComponent).join('/');
+            const response = await fetch(new URL(route, origin), {signal: AbortSignal.timeout(5000), redirect: 'error'});
+            assert.equal(response.status, 200, `前端资源不可访问：${relative}`);
+            const served = Buffer.from(await response.arrayBuffer());
+            assert.equal(sha256(served), sha256(await fs.readFile(file)), `镜像资源与源码不一致：${relative}`);
+            if (relative.endsWith('.png')) assert.match(response.headers.get('content-type') || '', /^image\/png\b/, `图片响应类型错误：${relative}`);
+          }
+          console.info(`网页接口代理通过；${files.length} 个前端文件的内容摘要全部与源码一致。`);
+          NODE

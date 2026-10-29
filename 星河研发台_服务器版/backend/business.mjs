@@ -262,8 +262,14 @@ export function createBusiness(db) {
   }
   function listEntities(actor, table, options = {}) {
     if (options.projectId) permission(actor, options.projectId);
-    const allowed = new Set(listProjects(actor, { includeArchived: options.includeArchived }).map(project => project.id));
-    return all(`SELECT * FROM ${table} ORDER BY created_at,id`).filter(row => allowed.has(row.project_id) && (!options.projectId || row.project_id === options.projectId) && (options.includeArchived || !row.archived)).map(rowValue);
+    const projects = listProjects(actor, { includeArchived: options.includeArchived });
+    return entitiesForProjects(table, projects, options);
+  }
+  // Only callers that have checked the actor's project access supply this scope.
+  function entitiesForProjects(table, projects, options = {}) {
+    const projectIds = projects.filter(project => !options.projectId || project.id === options.projectId).map(project => project.id);
+    if (!projectIds.length) return [];
+    return all(`SELECT * FROM ${table} WHERE project_id IN (${projectIds.map(() => '?').join(',')})${options.includeArchived ? '' : ' AND archived=0'} ORDER BY created_at,id`, ...projectIds).map(rowValue);
   }
   function createProject(actor, input) {
     inputRecord(input, [...PROJECT_FIELDS, 'ownerRole']); const user = actorUser(actor);
@@ -683,7 +689,8 @@ export function createBusiness(db) {
   });
   function bootstrap(actor, options = {}) {
     const user = actorUser(actor); const projects = listProjects(actor, options); const projectIds = new Set(projects.map(item => item.id));
-    const requirements = listEntities(actor, 'requirements', options); const tasks = listEntities(actor, 'tasks', options);
+    if (options.projectId) permission(actor, options.projectId);
+    const requirements = entitiesForProjects('requirements', projects, options); const tasks = entitiesForProjects('tasks', projects, options);
     const memberships = all('SELECT project_id,user_id,role FROM memberships').filter(row => projectIds.has(row.project_id)).map(row => ({ projectId: row.project_id, userId: row.user_id, role: row.role }));
     const visibleUserIds = new Set([user.id, ...memberships.map(item => item.userId)]);
     for (const item of [...projects, ...requirements, ...tasks]) for (const userId of [item.ownerId, item.assigneeId, ...(item.collaboratorIds || [])]) if (userId) visibleUserIds.add(userId);

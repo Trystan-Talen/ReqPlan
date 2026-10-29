@@ -1,5 +1,5 @@
 // ============================================================================
-// 星河研发台 · UI Kit
+// 星引研发台 · UI Kit（界面组件）
 // ----------------------------------------------------------------------------
 // 所有页面共用的界面片段生成函数。新页面、新模块必须优先使用这里的函数，
 // 不要在视图里手写按钮、状态标签、头像、页头、空状态等结构。
@@ -121,8 +121,9 @@ export function personChip(seed, name, size = 'xs') {
  * 按钮。variant: primary | secondary | accent | text | danger-text | icon
  * 用 action/data 绑定行为（全局事件委托读取 data-*），不要写 onclick。
  */
-export function button({ label = '', variant = 'secondary', size = '', iconName = '', action = '', data = {}, type = 'button', disabled = false, ariaLabel = '', title = '' } = {}) {
-  const cls = variant === 'text' ? 'text-button' : variant === 'danger-text' ? 'text-button danger' : variant === 'icon' ? 'icon-button' : `btn btn-${variant}${size === 'small' ? ' btn-small' : ''}`;
+export function button({ label = '', variant = 'secondary', size = '', iconName = '', action = '', data = {}, type = 'button', disabled = false, ariaLabel = '', title = '', touch = false } = {}) {
+  const base = variant === 'text' ? `text-button${size === 'touch' ? ' text-button-touch' : ''}` : variant === 'danger-text' ? 'text-button danger' : variant === 'icon' ? 'icon-button' : `btn btn-${variant}${size === 'small' ? ' btn-small' : ''}`;
+  const cls = base + (touch ? ' mobile-touch-target' : '');
   const dataAttrs = Object.fromEntries(Object.entries(data).map(([key, value]) => [`data-${key.replace(/[A-Z]/g, char => '-' + char.toLowerCase())}`, value]));
   return `<button${attrs({ type, class: cls, 'data-action': action || undefined, ...dataAttrs, disabled, 'aria-label': ariaLabel || undefined, title: title || undefined })}>${iconName ? icon(iconName) : ''}${variant === 'icon' ? '' : `${iconName && label ? ' ' : ''}${esc(label)}`}</button>`;
 }
@@ -140,16 +141,21 @@ export const switchToggle = (id, label, checked) => `<label class="archive-toggl
 export function heading(title, description, actionsHtml = '', scope = '') {
   return `<section class="page-heading"><div>${scope ? `<span class="scope-pill">${esc(scope)}</span>` : ''}<h1>${esc(title)}</h1>${description ? `<p>${esc(description)}</p>` : ''}</div>${actionsHtml ? `<div class="page-actions">${actionsHtml}</div>` : ''}</section>`;
 }
+/** 团队欢迎区：保留真实问候、全局待办与原有操作；小星仅作品牌陪伴。 */
+export function workbenchWelcome({ scope = '', title = '', summaryHtml = '', actionsHtml = '' } = {}) {
+  return `<section class="hero"><div class="hero-copy"><span class="scope-pill">${esc(scope)}</span><h1>${esc(title)}</h1><p>${summaryHtml}</p></div>${actionsHtml ? `<div class="page-actions">${actionsHtml}</div>` : ''}<figure class="hero-companion"><img src="/assets/xiaoxing-indigo.png" width="1254" height="1254" alt="小星，星引研发台的卡通项目伙伴，身穿靛蓝夹克，眨眼比耶" decoding="async"><figcaption>小星 · 你的项目伙伴</figcaption></figure></section>`;
+}
 /** 分区标题（页面内的二级标题）。 */
 export function sectionHeading(title, { count, actionsHtml = '' } = {}) {
   return `<div class="section-heading"><div class="section-heading-copy"><h2>${esc(title)}</h2>${count !== undefined ? countLabel(count) : ''}</div>${actionsHtml}</div>`;
 }
 /** 指标卡；放进 metricStrip()。tone: purple | blue | green | amber；alert=true 数字变红。 */
-export function metric(label, value, note, glyph, tone = '', alert = false) {
-  return `<article class="metric-card ${esc(tone)}${alert ? ' is-alert' : ''}"><div class="metric-top"><span>${esc(label)}</span><span class="metric-icon">${icon(glyph)}</span></div><div class="metric-value">${esc(value)}</div><div class="metric-note">${esc(note)}</div></article>`;
+export function metric(label, value, note, glyph, tone = '', alert = false, { keepDates = false } = {}) {
+  const noteHtml = keepDates ? String(note ?? '').split(/(\d{4}-\d{2}-\d{2})/).map(part => /^\d{4}-\d{2}-\d{2}$/.test(part) ? `<time class="metric-note-date" datetime="${esc(part)}">${esc(part)}</time>` : esc(part)).join('') : esc(note);
+  return `<article class="metric-card ${esc(tone)}${alert ? ' is-alert' : ''}"><div class="metric-top"><span>${esc(label)}</span><span class="metric-icon">${icon(glyph)}</span></div><div class="metric-value">${esc(value)}</div><div class="metric-note">${noteHtml}</div></article>`;
 }
 /** 指标条：一行最多 4 个 metric()。 */
-export const metricStrip = cardsHtml => `<div class="metrics-grid">${cardsHtml.join('')}</div>`;
+export const metricStrip = (cardsHtml, { mobileCompact = false } = {}) => `<div class="metrics-grid${mobileCompact ? ' metrics-grid-mobile-compact' : ''}">${cardsHtml.join('')}</div>`;
 /**
  * 面板：panel({ title, count, actionsHtml, introHtml, bodyHtml, noteHtml, padded })
  * bodyHtml 为表格或列表时 padded=false；纯文字内容 padded=true。
@@ -158,9 +164,9 @@ export function panel({ title = '', count, actionsHtml = '', introHtml = '', bod
   const head = title ? `<div class="panel-heading"><h2>${esc(title)}${count !== undefined ? ' ' + countLabel(count) : ''}</h2>${actionsHtml}</div>` : '';
   return `<section class="panel${className ? ' ' + esc(className) : ''}">${head}${introHtml ? `<div class="panel-intro">${introHtml}</div>` : ''}${padded ? `<div class="panel-pad">${bodyHtml}</div>` : bodyHtml}${noteHtml ? `<div class="panel-note">${noteHtml}</div>` : ''}</section>`;
 }
-/** 空状态：说明「为什么是空的」+「下一步做什么」。action 为 data-action 名称。 */
-export function empty(title, description, action = '', actionText = '') {
-  return `<div class="empty-state"><div class="empty-icon">${icon('inbox')}</div><h3>${esc(title)}</h3><p>${esc(description)}</p>${action ? `<button class="btn btn-secondary" data-action="${esc(action)}">${esc(actionText)}</button>` : ''}</div>`;
+/** 空状态：说明「为什么是空的」+「下一步做什么」。compact 适合侧栏等紧凑区域。 */
+export function empty(title, description, action = '', actionText = '', { compact = false } = {}) {
+  return `<div class="${compact ? 'empty-state-compact' : 'empty-state'}"><div class="empty-icon">${icon('inbox')}</div><h3>${esc(title)}</h3><p>${esc(description)}</p>${action ? `<button class="btn btn-secondary" data-action="${esc(action)}">${esc(actionText)}</button>` : ''}</div>`;
 }
 /** 加载占位。 */
 export const loading = (text = '正在读取最新内容…') => `<div class="work-loading" role="status">${esc(text)}</div>`;

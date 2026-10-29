@@ -8,7 +8,7 @@
     "source": "PRD M1〔GW-2、GW-3〕",
     "docRefs": [
       { "document": "M1-网关与调用.md", "type": "PRD", "sections": ["GW-2", "GW-3.1", "GW-3.5a"] },
-      { "document": "M1-网关与调用.feature", "type": "验收用例", "sections": ["GW-2", "GW-3.1"] }
+      { "document": "M1-网关与调用.feature", "type": "验收用例", "sections": ["GW-AC-01", "GW-AC-08", "GW-AC-12"] }
     ],
     "acceptanceCases": ["GW-AC-01", "GW-AC-08", "GW-AC-12"]
   },

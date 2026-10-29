@@ -65,4 +65,8 @@
 @media (max-width: 560px) {
   .document-link-list { max-height: 360px; padding: 0 var(--space-2) var(--space-2); }
   .document-link-heading { flex-wrap: wrap; }
+  #proposal-form .document-link-picker > summary,
+  #proposal-form .document-link-sections > summary,
+  #proposal-form .document-link-option { min-height: 44px; }
+  #proposal-form .document-link-item select { min-height: 44px; }
 }

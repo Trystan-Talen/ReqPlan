@@ -6,6 +6,8 @@ const requirement = { id: 'r-1', title: '用量导出', status: '已确定', ass
 const task = { id: 't-1', requirementId: 'r-1', title: '开发导出功能', ownerId: 'u-1', estimateHours: 8, status: 'wait', startDate: '2026-09-28', dueDate: '2026-10-10' };
 const users = [{ id: 'u-1', name: '小林' }];
 const expandedGroups = html => [...html.matchAll(/<details class="requirement-task-group" open><summary class="task-group-summary" data-task-group="([^"]+)"/g)].map(match => match[1]);
+const visibleText = html => html.replace(/<[^>]+>/g, '');
+const assertDate = (html, value) => assert.match(html, new RegExp(`<time datetime="${value}">${value}</time>`));
 
 test('按需求而非任务建组，优先展开未拆分需求并提供一个主操作', () => {
   const requirements = [requirement, { ...requirement, id: 'r-2', title: '还未拆分的需求' }, { ...requirement, id: 'r-3', title: '另一条待拆分需求' }];
@@ -18,7 +20,7 @@ test('按需求而非任务建组，优先展开未拆分需求并提供一个�
     assert.match(html, new RegExp(`data-linked-task="${id}"`));
     assert.match(html, new RegExp(`data-batch-requirement="${id}"`));
   }
-  assert.equal((html.match(/class="btn btn-primary btn-small"/g) || []).length, 3);
+  assert.equal((html.match(/class="btn btn-primary btn-small\b[^"]*"/g) || []).length, 3);
   assert.match(html, /class="task-group-more"[\s\S]*批量拆分任务/);
   assert.match(html, /尚未拆分任务。可从新建任务开始。/);
 });
@@ -31,7 +33,8 @@ test('展开状态由调用方控制，筛选任务不会改变完整进度和�
   assert.match(html, /当前显示 1 项/);
   assert.match(html, /data-task="t-2"/);
   assert.doesNotMatch(html, /data-task="t-1"|data-task="t-3"/);
-  assert.match(html, /2026-09-28 — 2026-10-15/);
+  assert.match(visibleText(html), /2026-09-28 — 2026-10-15/);
+  for (const value of ['2026-09-28', '2026-10-15', '2026-10-05']) assertDate(html, value);
   assert.match(html, /预计晚于承诺 10 天/);
   assert.match(html, /承诺交付[\s\S]*2026-10-05/);
   assert.deepEqual(expandedGroups(renderRequirementTaskGroups({ requirements: [requirement], tasks: [task], expandedIds: [] })), []);
@@ -74,7 +77,10 @@ test('分组标题、背景、验收、人员、编号和默认任务标题均�
 test('部分任务尚未排期显示缺项，全部终止不伪造完成进度', () => {
   const partial = renderRequirementTaskGroups({ requirements: [requirement], tasks: [{ ...task, dueDate: '' }], users });
   assert.match(partial, /0 \/ 1 项任务已排期，1 项待补齐日期/);
-  assert.match(partial, /2026-09-28 — 待排期/);
+  assert.match(visibleText(partial), /2026-09-28 — 待排期/);
+  assertDate(partial, '2026-09-28');
+  assertDate(partial, '2026-10-05');
+  assert.doesNotMatch(partial, /<time[^>]*>待排期<\/time>/);
   const terminated = renderRequirementTaskGroups({ requirements: [requirement], tasks: [{ ...task, status: 'terminated' }], users });
   assert.match(terminated, /0 \/ 0<small>有效任务完成/);
   assert.match(terminated, /拆分任务后自动汇总/);
@@ -84,7 +90,8 @@ test('部分任务尚未排期显示缺项，全部终止不伪造完成进度',
 test('完成或终止需求保留研发与承诺日期，不再展示预计延期风险', () => {
   for (const status of ['已完成', '已终止']) {
     const html = renderRequirementTaskGroups({ requirements: [{ ...requirement, status }], tasks: [{ ...task, status: 'done', completedAt: '2026-09-28T08:00:00Z' }] });
-    assert.match(html, /2026-09-28 — 2026-10-10/);
+    assert.match(visibleText(html), /2026-09-28 — 2026-10-10/);
+    for (const value of ['2026-09-28', '2026-10-10', '2026-10-05']) assertDate(html, value);
     assert.match(html, /承诺交付[\s\S]*2026-10-05/);
     assert.doesNotMatch(html, /预计晚于承诺|class="task-group-delay"/);
   }

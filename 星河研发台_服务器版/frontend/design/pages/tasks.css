@@ -85,9 +85,22 @@
 .task-group-empty { padding: var(--space-4); border: 1px dashed var(--border-strong); border-radius: var(--radius); color: var(--text-3); font-size: var(--text-sm); text-align: center; }
 .task-group-fallback { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius); }
 @media (max-width: 560px) {
+  .task-card { min-width: 0; }
+  .task-card-title { min-width: 0; max-width: 100%; min-height: 44px; overflow-wrap: anywhere; }
+  .task-request span { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+  .task-card-footer { flex-wrap: wrap; }
+  .task-card-footer .owner { max-width: 100%; }
+  .task-card-footer .due { flex: none; white-space: nowrap; font-size: var(--text-sm); }
+  .task-status-select { min-height: 44px !important; height: 44px; }
+  .task-review-actions .btn { min-height: 44px; height: auto; }
+  .task-more summary, .task-group-context > summary { display: flex; align-items: center; min-height: 44px; }
+  .task-group-more > summary { width: 44px; height: 44px; }
   .task-group-summary { grid-template-columns: minmax(0, 1fr) 16px; gap: var(--space-3); padding: var(--space-4); }
+  .task-group-title > button { max-width: 100%; }
   .task-group-progress { grid-column: 1; display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-base); }
   .task-group-chevron { grid-column: 2; grid-row: 1; }
   .task-group-body { padding: 0 var(--space-4) var(--space-4); }
   .task-group-schedule, .task-group-context-copy { grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+  .task-group-schedule time { white-space: nowrap; overflow-wrap: normal; }
+  .task-group-fallback > button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 }

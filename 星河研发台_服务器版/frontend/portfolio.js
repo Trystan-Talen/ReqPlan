@@ -207,7 +207,7 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
     const html = `<div class="schedule-row portfolio-row portfolio-level-1"><div class="schedule-name">${children.length ? toggle(key, req.title) : spacer}<span class="portfolio-name-copy"><button class="schedule-task-name" data-requirement="${esc(req.id)}">${esc(req.title)}</button><small>${esc(nameOf(req.assigneeId))}<span>·</span>${esc(req.status)}${window.source==='legacy'?'<span>·</span>历史承诺区间':''}${['late','risk'].includes(row.state)?healthBadge(row.state,row.lateDays,row):''}</small></span></div><div class="schedule-track">${commitment&&window.source!=='legacy'?`<span class="portfolio-cycle" style="left:${commitment.left}px;width:${commitment.width}px" title="承诺区间 ${esc(req.planStart)} — ${esc(req.planEnd)}" role="img" aria-label="承诺区间 ${esc(req.planStart)} 至 ${esc(req.planEnd)}"></span>`:''}${bar ? `<button data-requirement="${esc(req.id)}" class="schedule-bar schedule-bar-${stage} portfolio-requirement-bar${tone}${bar.width >= timelineLabelWidth(title) ? '' : ' is-compact'}" style="left:${bar.left}px;width:${bar.width}px;--progress:${number(row.progress * 100)}%" title="${esc(req.title)} · ${windowLabel} ${window.start} — ${window.end}${esc(commitmentLabel)} · 进度 ${percent(row.progress)}${row.reasons.length ? ' · ' + esc(row.reasons.join('；')) : ''}" aria-label="${esc(req.title)}，${windowLabel} ${window.start} 至 ${window.end}${esc(commitmentLabel)}，进度 ${percent(row.progress)}${row.reasons.length?'，'+esc(row.reasons.join('；')):''}">${bar.width >= timelineLabelWidth(title) ? `<span>${esc(title)}</span>` : ''}</button>${outsideLabel(bar, title)}` : '<span class="portfolio-undated">研发任务尚未排期</span>'}</div></div>`;
     return html + (open ? children.sort(byStart('startDate')).map(task => taskRow(task, 2)).join('') : '');
   };
-  const projectRows = shown.map(item => {
+  const renderProjectRows = () => shown.map(item => {
     const project = item.project, key = 'p:' + project.id, projectTasks = tasks.filter(task => task.projectId === project.id);
     const reqRows = item.rows.filter(row => row.state !== 'terminated' && (!filters.issues || ['late', 'risk'].includes(row.state)) && (filters.owner === 'all' || row.requirement.assigneeId === filters.owner || projectTasks.some(task => task.requirementId === row.requirement.id && !task.archived && task.ownerId === filters.owner)) && (matchesQuery(q, project.name, row.requirement.title, row.requirement.id) || projectTasks.some(task => task.requirementId === row.requirement.id && matchesQuery(q, task.title, task.id))));
     if (q && !reqRows.length && !matchesQuery(q, project.name)) return '';
@@ -221,23 +221,25 @@ export function renderPortfolio({ projects, requirements, tasks, users, today, s
     return head + (open ? reqRows.sort((a, b) => (parseDay(a.window.start) ?? Infinity) - (parseDay(b.window.start) ?? Infinity) || String(a.requirement.id).localeCompare(String(b.requirement.id))).map(row => requirementRow(row, projectTasks)).join('') : '');
   }).join('');
 
-  // Person view: every unfinished dated task in the shown projects, packed into lanes.
   const shownIds = new Set(shown.map(item => item.project.id));
-  const openTasks = tasks.filter(task => shownIds.has(task.projectId) && isLive(task) && !isFinished(task) && task.ownerId && ownerMatch(task.ownerId) && matchesQuery(q, task.title, task.id, nameOf(task.ownerId)));
-  const projectName = new Map(visible.map(project => [project.id, project.name]));
-  const people = [...new Set(openTasks.map(task => task.ownerId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'zh-CN'));
-  const personRows = people.map(id => {
-    const own = openTasks.filter(task => task.ownerId === id), dated = own.map(task => ({ task, startDay: parseDay(task.startDate), endDay: parseDay(task.dueDate) })).filter(item => item.startDay !== null && item.endDay !== null && item.startDay <= item.endDay);
-    const packed = packLanes(dated), parallel = maxParallelProjects(dated);
-    const bars = packed.items.map(({ task, startDay, endDay, lane }) => {
-      const left = x(startDay), width = Math.max(6, number((endDay - startDay + 1) * px)), text = `${projectName.get(task.projectId) || ''} · ${task.title}`, late = todayDay !== null && endDay < todayDay;
-      return `<button data-task="${esc(task.id)}" class="portfolio-lane-bar${late ? ' is-overdue' : ''}" style="left:${left}px;width:${width}px;top:${8 + lane * 30}px;--project:${colorOf(task.projectId)}" title="${esc(text)} · ${task.startDate} — ${task.dueDate}" aria-label="${esc(text)}，${task.startDate} 至 ${task.dueDate}${late ? '，已逾期' : ''}">${width >= 40 ? `<span>${esc(task.title)}</span>` : ''}</button>`;
+  // 只构造当前视图的行，避免为未显示的人员视图计算任务重叠。
+  const renderPersonRows = () => {
+    const openTasks = tasks.filter(task => shownIds.has(task.projectId) && isLive(task) && !isFinished(task) && task.ownerId && ownerMatch(task.ownerId) && matchesQuery(q, task.title, task.id, nameOf(task.ownerId)));
+    const projectName = new Map(visible.map(project => [project.id, project.name]));
+    const people = [...new Set(openTasks.map(task => task.ownerId))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'zh-CN'));
+    return people.map(id => {
+      const own = openTasks.filter(task => task.ownerId === id), dated = own.map(task => ({ task, startDay: parseDay(task.startDate), endDay: parseDay(task.dueDate) })).filter(item => item.startDay !== null && item.endDay !== null && item.startDay <= item.endDay);
+      const packed = packLanes(dated), parallel = maxParallelProjects(dated);
+      const bars = packed.items.map(({ task, startDay, endDay, lane }) => {
+        const left = x(startDay), width = Math.max(6, number((endDay - startDay + 1) * px)), text = `${projectName.get(task.projectId) || ''} · ${task.title}`, late = todayDay !== null && endDay < todayDay;
+        return `<button data-task="${esc(task.id)}" class="portfolio-lane-bar${late ? ' is-overdue' : ''}" style="left:${left}px;width:${width}px;top:${8 + lane * 30}px;--project:${colorOf(task.projectId)}" title="${esc(text)} · ${task.startDate} — ${task.dueDate}" aria-label="${esc(text)}，${task.startDate} 至 ${task.dueDate}${late ? '，已逾期' : ''}">${width >= 40 ? `<span>${esc(task.title)}</span>` : ''}</button>`;
+      }).join('');
+      const hoursTotal = own.reduce((sum, task) => sum + hours(task), 0);
+      return `<div class="schedule-row portfolio-row portfolio-person-row" style="height:${Math.max(46, 16 + packed.lanes * 30)}px"><div class="schedule-name"><span class="portfolio-name-copy"><strong class="portfolio-person-name">${esc(nameOf(id))}</strong><small>${own.length} 个未完成任务${hoursTotal ? `<span>·</span>${hoursTotal} 小时` : ''}${own.length - dated.length ? `<span>·</span>${own.length - dated.length} 个待定日期` : ''}</small>${parallel >= 2 ? `<small${parallel >= 3 ? ' class="portfolio-risk-label"' : ''}>同一天最多 ${parallel} 个项目并行</small>` : ''}</span></div><div class="schedule-track">${bars}</div></div>`;
     }).join('');
-    const hoursTotal = own.reduce((sum, task) => sum + hours(task), 0);
-    return `<div class="schedule-row portfolio-row portfolio-person-row" style="height:${Math.max(46, 16 + packed.lanes * 30)}px"><div class="schedule-name"><span class="portfolio-name-copy"><strong class="portfolio-person-name">${esc(nameOf(id))}</strong><small>${own.length} 个未完成任务${hoursTotal ? `<span>·</span>${hoursTotal} 小时` : ''}${own.length - dated.length ? `<span>·</span>${own.length - dated.length} 个待定日期` : ''}</small>${parallel >= 2 ? `<small${parallel >= 3 ? ' class="portfolio-risk-label"' : ''}>同一天最多 ${parallel} 个项目并行</small>` : ''}</span></div><div class="schedule-track">${bars}</div></div>`;
-  }).join('');
+  };
 
-  const rowsHtml = filters.view === 'person' ? personRows : projectRows;
+  const rowsHtml = filters.view === 'person' ? renderPersonRows() : renderProjectRows();
   const people2 = [...new Set(tasks.filter(task => shownIds.has(task.projectId) && !task.archived && task.ownerId).map(task => task.ownerId).concat(requirements.filter(item => shownIds.has(item.projectId) && item.assigneeId).map(item => item.assigneeId)))].sort((a, b) => nameOf(a).localeCompare(nameOf(b), 'zh-CN'));
   const selected = (value, current) => value === current ? ' selected' : '';
   const controls = `<div class="schedule-controls">${segmented([{ value: 'project', label: '按项目' }, { value: 'person', label: '按人员' }], filters.view, 'portfolio-view', '甘特图视图')}${timelineZoomControls(state, zoom, scale, px)}<div class="schedule-filters"><label><span>项目</span><select data-portfolio-filter="project" aria-label="按项目筛选"><option value="all"${selected('all', filters.project)}>全部项目</option>${visible.map(project => `<option value="${esc(project.id)}"${selected(project.id, filters.project)}>${esc(project.name)}</option>`).join('')}</select></label><label><span>负责人</span><select data-portfolio-filter="owner" aria-label="按负责人筛选"><option value="all"${selected('all', filters.owner)}>全部负责人</option>${people2.map(id => `<option value="${esc(id)}"${selected(id, filters.owner)}>${esc(nameOf(id))}</option>`).join('')}</select></label>${switchToggle('portfolio-issues', '只看逾期 / 有风险', filters.issues)}</div></div>${timelineDateForm(state)}`;

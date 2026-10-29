@@ -22,6 +22,15 @@ const iso = stamp => new Date(stamp).toISOString().slice(0,10);
 const noticeId = text => createHash('sha256').update(text).digest('hex').slice(0,32);
 const active = item => !item.archived;
 const finished = item => ['done','terminated'].includes(taskStage(item.status));
+function groupBy(items,key) {
+  const groups=new Map();
+  for(const item of items) {
+    const value=item[key];
+    if(!groups.has(value))groups.set(value,[]);
+    groups.get(value).push(item);
+  }
+  return groups;
+}
 
 export function summarizeWork(data,user,date) {
   const today=day(date);
@@ -29,13 +38,25 @@ export function summarizeWork(data,user,date) {
   const projects=data.projects.filter(active), projectIds=new Set(projects.map(item=>item.id));
   const tasks=data.tasks.filter(item=>active(item)&&projectIds.has(item.projectId));
   const requirements=data.requirements.filter(item=>active(item)&&projectIds.has(item.projectId)&&!['未确定','待评审'].includes(item.status));
+  const tasksByProject=groupBy(tasks,'projectId'), tasksByRequirement=groupBy(tasks,'requirementId');
+  const requirementsByProject=groupBy(requirements,'projectId'), requirementById=new Map(requirements.map(item=>[item.id,item]));
+  // Reuse derived state only within this snapshot; later requests must see writes and role changes.
+  const deliveryStates=new Map();
+  function deliveryOf(item) {
+    if(!deliveryStates.has(item)) {
+      const linked=(tasksByRequirement.get(item.id)||[]).filter(task=>task.projectId===item.projectId);
+      const dependencies=(item.dependencyIds||[]).map(id=>requirementById.get(id)).filter(Boolean);
+      deliveryStates.set(item,requirementDeliveryState(item,linked,dependencies));
+    }
+    return deliveryStates.get(item);
+  }
   const roles=new Map(data.memberships.filter(item=>item.userId===user.id).map(item=>[item.projectId,item.role]));
   const manager=id=>user.role==='admin'||roles.get(id)==='lead';
   const reviewer=id=>user.role==='admin'||['product','lead','developer','tester'].includes(roles.get(id));
   const lead=id=>roles.get(id)==='lead';
   const assignedTasks=tasks.filter(item=>item.ownerId===user.id&&!finished(item));
   const assignedRequirements=requirements.filter(item=>!finished(item)&&(item.ownerId===user.id||item.assigneeId===user.id||(item.collaboratorIds||[]).includes(user.id))).map(item=>{
-    const state=requirementDeliveryState(item,tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id),requirements);
+    const state=deliveryOf(item);
     return {...item,developmentStart:state.developmentStart,developmentEnd:state.developmentEnd,developmentScheduleComplete:state.scheduleReady};
   });
   const reviews=tasks.filter(item=>taskStage(item.status)==='test'&&item.ownerId!==user.id&&reviewer(item.projectId));
@@ -54,8 +75,7 @@ export function summarizeWork(data,user,date) {
   // Preparation is read from actual task completeness, not a manual plan-submission flag
   // or commitment dates. Keep the existing splits contract as the lead's planning inbox.
   const splits=requirements.filter(item=>!finished(item)&&lead(item.projectId)).flatMap(item=>{
-    const linked=tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id);
-    const delivery=requirementDeliveryState(item,linked,requirements);
+    const delivery=deliveryOf(item);
     if(delivery.planReady&&delivery.scheduleReady)return [];
     const planningKind=delivery.planReady?'schedule':'split';
     const planningGates=delivery.planReady?[`请完善 ${delivery.unscheduledCount??delivery.liveTasks.length} 项有效任务的开始和截止日期`]:delivery.planGates;
@@ -72,8 +92,7 @@ export function summarizeWork(data,user,date) {
   // rereading or editing content stays quiet; completing rework creates a fresh reminder.
   for(const item of requirements) {
     if(item.status!=='测试中'||!(user.role==='admin'||REQUIREMENT_REVIEW_ROLES.includes(roles.get(item.projectId))))continue;
-    const linked=tasks.filter(task=>task.projectId===item.projectId&&task.requirementId===item.id);
-    const delivery=requirementDeliveryState(item,linked,requirements);
+    const delivery=deliveryOf(item);
     if(!delivery.readyForAcceptance)continue;
     const completedScope=delivery.liveTasks.map(task=>[task.id,task.completedAt||'']).sort(([a],[b])=>a.localeCompare(b));
     reminders.push({id:noticeId(`requirement-review:${item.id}:${JSON.stringify(completedScope)}`),kind:'review',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:'全部有效任务已完成，等待确认需求验收',date:item.planEnd||''});
@@ -83,8 +102,8 @@ export function summarizeWork(data,user,date) {
   for(const document of data.documents||[]) {
     const changedAt=day(document.versionCreatedAt);
     if(document.version<2||!document.changedSections?.length||changedAt===null||changedAt<today-7*DAY)continue;
-    for(const item of requirements) {
-      if(item.projectId!==document.projectId||['已完成','已终止'].includes(item.status))continue;
+    for(const item of requirementsByProject.get(document.projectId)||[]) {
+      if(['已完成','已终止'].includes(item.status))continue;
       if(!(item.assigneeId===user.id||['lead','tester'].includes(roles.get(item.projectId))))continue;
       const sections=affectedSections(item,document);
       if(sections.length)reminders.push({id:noticeId(`document:${document.id}:${document.version}:${item.id}`),kind:'document',entityType:'requirement',entityId:item.id,projectId:item.projectId,title:item.title,message:`《${document.title}》v${document.version} 修改了关联章节 ${sections.slice(0,6).join('、')}${sections.length>6?' 等':''}`,date:document.versionCreatedAt.slice(0,10)});
@@ -102,7 +121,7 @@ export function summarizeWork(data,user,date) {
     if(bucket) {bucket.completedTasks++;if(created!==null&&created<=stamp)cycleDays.push((stamp-created)/DAY);}
   }
   const health=projects.map(project=>{
-    const pending=tasks.filter(item=>item.projectId===project.id&&!finished(item));
+    const pending=(tasksByProject.get(project.id)||[]).filter(item=>!finished(item));
     const scheduled=pending.filter(item=>day(item.dueDate)!==null);
     const overdue=scheduled.filter(item=>day(item.dueDate)<today).length;
     return {projectId:project.id,name:project.name,pending:pending.length,scheduled:scheduled.length,overdue,unscheduled:pending.length-scheduled.length,overdueRate:scheduled.length?Math.round(overdue/scheduled.length*100):null};

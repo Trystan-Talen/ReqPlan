@@ -1,5 +1,5 @@
 {
-  "$comment": "requirement 填 requirement import 输出的真实需求编号；owner 可填用户名、成员编号或 owners 里的别名。示例中的编号和日期都要替换。",
+  "$comment": "requirement（需求编号）填已确认且未结束的真实需求编号，来源为 requirement import（导入需求）或 proposal approve（确认转需求）的输出；owner（负责人）可填用户名、成员编号或 owners（负责人别名）中的别名。示例中的编号和日期都要替换；验收缓冲只影响建议日期，应用任务规划不会写入需求承诺或基线。",
   "startDate": "2026-09-21",
   "capacityHours": 7,
   "capacityOverrides": [{ "from": "2026-09-21", "until": "2026-10-09", "hours": 8 }],
