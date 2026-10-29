@@ -3,11 +3,12 @@ import path from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {Client,Store,fail,normalizeUrl} from './client.mjs';
 import {schedulePlan,validatePlan} from './plan.mjs';
+import {VERSION} from './version.mjs';
 
 const HELP=`星河命令行工具 — 默认输出 JSON（结构化数据）
 
 配置与账号：
-  xinghe config set-url <平台地址> --profile local
+  xinghe config set-url <平台地址> --profile local [--allow-http]
   xinghe config show --profile local
   xinghe auth login --username admin --profile local
   xinghe auth me | logout
@@ -56,6 +57,8 @@ const HELP=`星河命令行工具 — 默认输出 JSON（结构化数据）
 
 全局参数：--profile 环境名（默认 default）；--url 地址（仅本次覆盖）
 地址优先级：--url > XINGHE_URL（环境变量）> 当前环境配置。没有内置端口。
+远程 HTTP（未加密连接）须在 config set-url 时用 --allow-http（允许未加密连接）明确许可，仅对该环境的完整地址生效。
+地址填写平台入口，不带 /#/ 后的页面路径；配置一次后登录、查询和写入无需重复许可。
 读取参数：--project、--owner、--status、--query、--include-archived
 写入参数：--title、--description、--owner、--status、--priority、--hours、--points
 写入文件：--data-file 文件或 -（标准输入）；--data JSON字符串；二者不能同时使用。
@@ -83,7 +86,7 @@ const SCHEMA={
     behavior:'按阶段与文件顺序安排任务，默认接在已有未完成工作之后。apply（应用）需要主开发或管理员，只接受已确认且未结束需求；建任务并设置主责协作，由后端同步阶段。建议交付日期含验收缓冲，仅供参考，不写入需求承诺日期或基线。已有任务跳过；重跑不覆盖人工改动。晚于项目目标或已有承诺时需 --force（接受延期）。after（前置任务标题）只约束本次日期计算，不创建服务端任务依赖。'},
   notes:'数组、数字、布尔值请用结构化数据文件；成员编号通过 project members 查询。最终校验由后端负责。'
 };
-const FLAGS=new Set(['help','include-archived','dry-run','password-stdin','force','primary']);
+const FLAGS=new Set(['help','include-archived','dry-run','password-stdin','force','primary','allow-http']);
 const VALUES=new Set(['profile','url','username','project','owner','assignee','status','query','from','to','title','description','acceptance','proposer','decision-reason','priority','requirement','hours','points','version','start','end','data-file','data','request-id','token','reason','kind','basis','doc-version','output','file','type','note','document','date']);
 export function parse(args) {
   const opts=Object.create(null),pos=[];
@@ -170,8 +173,13 @@ async function objectPayload(opts) {
   try {const value=JSON.parse(source);if(value && typeof value==='object' && !Array.isArray(value)) return value;} catch {}
   fail('INVALID_JSON','输入内容必须是结构化数据对象。');
 }
+function resolveUrl(value,config) {
+  const url=normalizeUrl(value,{allowHttp:true});
+  const allowHttp=config.url===url && config.httpAllowedUrl===url;
+  return {url:normalizeUrl(url,{allowHttp}),allowHttp};
+}
 export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader=readPassword,env=process.env}={}) {
-  if(args.length===1 && ['--version','-v'].includes(args[0])) return '0.4.0';
+  if(args.length===1 && ['--version','-v'].includes(args[0])) return VERSION;
   const {opts,pos}=parse(args);
   if(opts.help || !pos.length) return HELP;
   const [group,action,id]=pos;
@@ -181,20 +189,25 @@ export async function run(args,{store=new Store(),fetchImpl=fetch,passwordReader
   const configName=`profile-${profile}.json`;
   const config=await store.read(configName,{});
   if(group==='config') {
-    allowed(opts,[]);
     if(action==='set-url' && pos.length===3) {
+      allowed(opts,['allow-http']);
       if(opts.url) fail('USAGE','set-url 命令请直接提供地址，不使用 --url。');
-      const url=normalizeUrl(id);await store.write(configName,{url});return {data:{profile,url,note:'地址已保存；新地址需要独立登录。'}};
+      const url=normalizeUrl(id,{allowHttp:Boolean(opts['allow-http'])});
+      const httpAllowedUrl=opts['allow-http'] && new URL(url).protocol==='http:' ? url : null;
+      await store.write(configName,{url,...(httpAllowedUrl?{httpAllowedUrl}:{})});
+      return {data:{profile,url,httpAllowedUrl,note:httpAllowedUrl?'地址已保存，并已为本环境的该地址允许 HTTP（未加密连接）；密码和会话将以明文传输。新地址需要独立登录。':'地址已保存；新地址需要独立登录。'}};
     }
     if(action==='show' && pos.length===2) {
+      allowed(opts,[]);
       const selected=opts.url || env.XINGHE_URL || config.url;
-      return {data:{profile,url:selected?normalizeUrl(selected):null,configuredUrl:config.url || null}};
+      const resolved=selected?resolveUrl(selected,config):null;
+      return {data:{profile,url:resolved?.url || null,configuredUrl:config.url || null,httpAllowedUrl:resolved?.allowHttp?resolved.url:null}};
     }
     fail('USAGE','配置命令格式错误，使用 --help 查看。');
   }
   const selected=opts.url || env.XINGHE_URL || config.url;
   if(!selected) fail('URL_REQUIRED','请先 config set-url 配置平台地址，或提供 --url。');
-  const client=new Client({url:selected,profile,store,fetchImpl});
+  const client=new Client({...resolveUrl(selected,config),profile,store,fetchImpl});
   const result=data=>({server:client.url,profile,data});
   if(group==='health' && pos.length===1) {allowed(opts,[]);return result((await client.request('/api/health',{authenticated:false})).data);}
   if(group==='auth' && pos.length===2) {

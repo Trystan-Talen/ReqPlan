@@ -1,6 +1,6 @@
 {
   "name": "xinghe-cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "星河研发台命令行工具",
   "type": "module",
   "bin": {
