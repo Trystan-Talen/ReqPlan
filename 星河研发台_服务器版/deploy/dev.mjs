@@ -58,17 +58,17 @@ export function waitForMessage(child,{type,instanceId,timeoutMs=20000,signal}) {
   });
 }
 
-function frontendHandler(apiPort) {
-  const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'};
+export function frontendHandler(apiPort) {
+  const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.webp':'image/webp','.avif':'image/avif'};
   const frontend=path.join(root,'frontend');
   return (req,res)=>{
     if(req.url.startsWith('/api/')) {
-      if(!apiPort()){res.writeHead(503,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'接口服务暂未就绪。'}));}
+      if(!apiPort()){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});return res.end(JSON.stringify({error:'接口服务暂未就绪。'}));}
       const proxy=http.request({hostname:'127.0.0.1',port:apiPort(),path:req.url,method:req.method,headers:req.headers},upstream=>{res.writeHead(upstream.statusCode,upstream.headers);upstream.pipe(res);});
       // The upstream may fail after beginning a response. Avoid writing a second
       // response (or ending an already finished stream) in that race.
       proxy.on('error',()=>{
-        if (!res.headersSent) res.writeHead(502, {'Content-Type':'application/json; charset=utf-8'});
+        if (!res.headersSent) res.writeHead(502, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
         if (!res.writableEnded) res.end(JSON.stringify({error:'接口服务暂未就绪。'}));
       });
       req.pipe(proxy);return;
@@ -78,9 +78,13 @@ function frontendHandler(apiPort) {
     const requested=path.resolve(frontend,'.'+url);
     if(!requested.startsWith(frontend+path.sep)&&requested!==frontend){res.writeHead(403);return res.end();}
     let file=requested;
-    if(!fs.existsSync(file)||!fs.statSync(file).isFile())file=path.join(frontend,'index.html');
+    if(!fs.existsSync(file)||!fs.statSync(file).isFile()){
+      if(url.startsWith('/assets/')){res.writeHead(404,{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});return res.end();}
+      file=path.join(frontend,'index.html');
+    }
     if(!fs.existsSync(file)){res.writeHead(503);return res.end('前端尚未就绪。');}
-    res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"});
+    const immutable=/^\/assets\/[^/]+\.[a-f0-9]{12}\.(?:webp|png|avif)$/.test(url);
+    res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':immutable?'public, max-age=31536000, immutable':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"});
     if(req.method==='HEAD')return res.end();const stream=fs.createReadStream(file);stream.on('error',()=>res.destroy());stream.pipe(res);
   };
 }

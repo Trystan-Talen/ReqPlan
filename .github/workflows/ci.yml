@@ -91,7 +91,7 @@ jobs:
           BACKUP_ENABLED: '0'
           DATABASE_PATH: ':memory:'
           XINGHE_HTTP_SOCKET: '1'
-        run: node --test backend/tests/http.test.mjs
+        run: node --test backend/tests/http.test.mjs backend/tests/static-assets.test.mjs
       - name: 构建接口镜像并检查临时实例健康状态
         working-directory: ${{ steps.locate.outputs.directory }}
         shell: bash
@@ -175,16 +175,18 @@ jobs:
 
           const origin = new URL(process.env.XINGHE_CI_WEB_ORIGIN);
           assert.equal(origin.hostname, '127.0.0.1');
-          let healthy = false;
+          let healthy = false, healthCache = '';
           for (let attempt = 0; attempt < 40; attempt++) {
             try {
               const response = await fetch(new URL('/api/health', origin), {signal: AbortSignal.timeout(2000)});
               healthy = response.ok && (await response.json()).status === 'ok';
+              healthCache = response.headers.get('cache-control');
             } catch {}
             if (healthy) break;
             await delay(250);
           }
           assert(healthy, '网页容器未成功代理接口健康检查');
+          assert.equal(healthCache, 'no-store', '接口代理不可继承静态资源缓存');
 
           const root = path.resolve('frontend');
           const files = [];
@@ -209,6 +211,15 @@ jobs:
             const served = Buffer.from(await response.arrayBuffer());
             assert.equal(sha256(served), sha256(await fs.readFile(file)), `镜像资源与源码不一致：${relative}`);
             if (relative.endsWith('.png')) assert.match(response.headers.get('content-type') || '', /^image\/png\b/, `图片响应类型错误：${relative}`);
+            if (relative.endsWith('.webp')) assert.match(response.headers.get('content-type') || '', /^image\/webp\b/, `图片响应类型错误：${relative}`);
+            if (/^assets\/[^/]+\.[a-f0-9]{12}\.(?:webp|png|avif)$/.test(relative)) {
+              assert.equal(response.headers.get('cache-control'), 'public, max-age=31536000, immutable', `摘要图片未开启长期缓存：${relative}`);
+              assert.equal(response.headers.get('x-content-type-options'), 'nosniff', '图片响应丢失安全头');
+              assert(response.headers.get('content-security-policy'), '图片响应丢失内容安全策略');
+            } else assert.equal(response.headers.get('cache-control'), 'no-cache', `非摘要资源错误使用长期缓存：${relative}`);
           }
+          const missing = await fetch(new URL('/assets/missing.0123456789ab.webp', origin));
+          assert.equal(missing.status, 404, '缺失图片不应回退成网页');
+          assert.equal(missing.headers.get('cache-control'), 'no-cache', '缺失图片不可长期缓存');
           console.info(`网页接口代理通过；${files.length} 个前端文件的内容摘要全部与源码一致。`);
           NODE

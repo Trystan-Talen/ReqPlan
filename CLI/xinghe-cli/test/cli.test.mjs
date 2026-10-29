@@ -30,6 +30,70 @@ test('地址支持本机动态端口、远程加密地址及子路径，拒绝�
   assert.equal(normalizeUrl('http://[::1]:54321'),'http://[::1]:54321');
   for(const value of ['http://example.com','https://u:p@example.com','https://example.com?token=x','file:///tmp','https://example.com/#token']) assert.throws(()=>normalizeUrl(value));
 });
+test('远程 HTTP 默认拒绝，明确许可也不放过凭证、查询、片段和其他协议',()=>{
+  const address='http://203.0.113.40:3003';
+  assert.throws(()=>normalizeUrl(address),{code:'HTTPS_REQUIRED'});
+  assert.throws(()=>normalizeUrl('http://192.168.1.8:3003'),{code:'HTTPS_REQUIRED'});
+  assert.equal(normalizeUrl(address+'/',{allowHttp:true}),address);
+  for(const value of ['http://u:p@example.com','http://example.com?token=x','http://example.com/#/team','file:///tmp','ftp://example.com']) {
+    assert.throws(()=>normalizeUrl(value,{allowHttp:true}),{code:'INVALID_URL'});
+  }
+});
+test('HTTP 许可按环境和完整地址保存，地址覆盖不会继承其他地址许可',async t=>{
+  const {store}=await fixture(t),address='http://203.0.113.40:3003/platform';
+  const calls=[];
+  const fetchImpl=async target=>{calls.push(target);return Response.json({status:'ok'});};
+  const exec=(args,env={})=>run(args,{store,env,fetchImpl});
+  await assert.rejects(exec(['config','set-url',address,'--profile','internal']),{code:'HTTPS_REQUIRED'});
+  assert.equal(await store.read('profile-internal.json'),null);
+  const saved=(await exec(['config','set-url',address+'/','--allow-http','--profile','internal'])).data;
+  assert.equal(saved.httpAllowedUrl,address);assert.match(saved.note,/明文传输/);
+  assert.deepEqual(await store.read('profile-internal.json'),{url:address,httpAllowedUrl:address});
+  assert.equal((await exec(['config','show','--profile','internal'])).data.httpAllowedUrl,address);
+  await exec(['health','--profile','internal']);
+  await exec(['health','--profile','internal','--url',address+'/']);
+  await exec(['health','--profile','internal'],{XINGHE_URL:address});
+  await exec(['health','--profile','internal','--url',address],{XINGHE_URL:'http://other.example.com'});
+  assert.deepEqual(calls,Array(4).fill(address+'/api/health'));
+  for(const other of ['http://203.0.113.41:3003/platform','http://203.0.113.40:3004/platform','http://203.0.113.40:3003/other','http://203.0.113.40:3003/platform/child']) {
+    await assert.rejects(exec(['health','--profile','internal','--url',other]),{code:'HTTPS_REQUIRED'});
+    await assert.rejects(exec(['health','--profile','internal'],{XINGHE_URL:other}),{code:'HTTPS_REQUIRED'});
+    await assert.rejects(exec(['config','show','--profile','internal','--url',other]),{code:'HTTPS_REQUIRED'});
+  }
+  await assert.rejects(exec(['health','--profile','different','--url',address]),{code:'HTTPS_REQUIRED'});
+  assert.equal(calls.length,4);
+  await assert.rejects(exec(['health','--profile','internal','--allow-http']),{code:'USAGE'});
+  await assert.rejects(exec(['config','show','--profile','internal','--allow-http']),{code:'USAGE'});
+});
+test('重新配置地址会移除原 HTTP 许可，配置字段变更也不能把许可转给新地址',async t=>{
+  const {store}=await fixture(t),address='http://internal.example.com:3003';
+  const exec=args=>run(args,{store,env:{},fetchImpl:async()=>assert.fail('不应发出请求')});
+  await exec(['config','set-url',address,'--allow-http']);
+  await assert.rejects(exec(['config','set-url','http://other.example.com']),{code:'HTTPS_REQUIRED'});
+  assert.equal((await store.read('profile-default.json')).httpAllowedUrl,address);
+  await store.write('profile-default.json',{url:'http://other.example.com',httpAllowedUrl:address});
+  await assert.rejects(exec(['health']),{code:'HTTPS_REQUIRED'});
+  await exec(['config','set-url',address,'--allow-http']);
+  await exec(['config','set-url','https://internal.example.com:3003']);
+  assert.deepEqual(await store.read('profile-default.json'),{url:'https://internal.example.com:3003'});
+  assert.equal((await exec(['config','show'])).data.httpAllowedUrl,null);
+  await assert.rejects(exec(['health','--url',address]),{code:'HTTPS_REQUIRED'});
+});
+test('已许可的 HTTP 地址仍隔离凭证并阻止接口及下载重定向',async t=>{
+  const {store}=await fixture(t),address='http://internal.example.com:3003';
+  let calls=0;
+  const fetchImpl=async(target,options)=>{calls++;assert.ok(target.startsWith(address+'/api/'));assert.equal(options.redirect,'manual');return new Response('',{status:302,headers:{Location:'http://other.example.com/api/auth/me'}});};
+  const exec=args=>run(args,{store,env:{},fetchImpl});
+  await exec(['config','set-url',address,'--allow-http','--profile','internal']);
+  await session(store,'internal',address);
+  await assert.rejects(exec(['auth','me','--profile','internal','--url','https://internal.example.com:3003']),{code:'LOGIN_REQUIRED'});
+  await exec(['config','set-url',address,'--allow-http','--profile','second']);
+  await assert.rejects(exec(['auth','me','--profile','second']),{code:'LOGIN_REQUIRED'});
+  assert.equal(calls,0);
+  await assert.rejects(exec(['auth','me','--profile','internal']),{code:'REDIRECT_BLOCKED'});
+  await assert.rejects(exec(['document','download','d-test','--profile','internal']),{code:'REDIRECT_BLOCKED'});
+  assert.equal(calls,2);
+});
 test('未知参数和重复参数立即失败',()=>{
   assert.throws(()=>parse(['--password','secret']),{code:'USAGE'});
   assert.throws(()=>parse(['--url','x','--url','y']),{code:'USAGE'});
@@ -104,6 +168,7 @@ test('可执行入口：帮助、错误输出和退出码',()=>{
   const entry=fileURLToPath(new URL('../bin/xinghe.mjs',import.meta.url));
   const help=spawnSync(process.execPath,[entry,'--help'],{encoding:'utf8'});assert.equal(help.status,0);assert.match(help.stdout,/星河命令行工具/);
   const error=spawnSync(process.execPath,[entry,'--unknown'],{encoding:'utf8'});assert.equal(error.status,1);assert.equal(error.stdout,'');assert.equal(JSON.parse(error.stderr).ok,false);
+  const version=spawnSync(process.execPath,[entry,'--version'],{encoding:'utf8'});assert.equal(version.status,0);assert.equal(version.stdout.trim(),'0.4.1');
 });
 
 // Transport-only adapter: actual HTTP handler, authentication and business/database
@@ -131,6 +196,30 @@ async function backendFixture(t) {
   const createRequirement=async(title,extra={})=>(await exec(['requirement','create','--data',JSON.stringify({projectId:project.id,title,description:'具体背景与范围',acceptance:'可验证的验收结果',...extra})])).data;
   return {app,db,dir,store,exec,actor,project,createRequirement};
 }
+test('远程 HTTP 许可一次后完成真实后端登录、查询、写入、冲突及退出闭环',async t=>{
+  const {store}=await fixture(t),db=openDatabase(':memory:');t.after(()=>db.close());
+  const address='http://203.0.113.40:3003';
+  const app=createApplication({db,publicOrigin:address,secureCookies:false,logger:{info(){},error(){}}});
+  const password='http-fixture-only-123';
+  await app.auth.bootstrapAdmin({username:'http-admin',name:'示例管理员',password});
+  const transport=handlerFetch(app),calls=[];
+  const fetchImpl=(target,options)=>{assert.ok(target.startsWith(address+'/api/'));assert.equal(options.headers['User-Agent'],'xinghe-cli/0.4.1');calls.push(target);return transport(target,options);};
+  const exec=args=>run([...args,'--profile','internal'],{store,env:{},fetchImpl,passwordReader:async()=>password});
+  await assert.rejects(exec(['health','--url',address]),{code:'HTTPS_REQUIRED'});assert.equal(calls.length,0);
+  await exec(['config','set-url',address,'--allow-http']);
+  assert.equal((await exec(['health'])).data.status,'ok');
+  const login=(await exec(['auth','login','--username','http-admin'])).data;
+  assert.equal(login.user.username,'http-admin');assert.doesNotMatch(JSON.stringify(login),/http-fixture-only|csrfToken|xinghe_session/);
+  const project=app.business.createProject(login.user,{name:'未加密部署兼容测试',targetDate:'2026-12-31'});
+  assert.equal((await exec(['project','list'])).data.count,1);
+  const requirement=(await exec(['requirement','create','--project',project.id,'--title','HTTP 兼容需求','--description','隔离后端测试','--acceptance','登录与写入均可用'])).data;
+  const updated=(await exec(['requirement','update',requirement.id,'--version',String(requirement.version),'--title','已修改的需求'])).data;
+  assert.equal(updated.title,'已修改的需求');
+  await assert.rejects(exec(['requirement','update',requirement.id,'--version',String(requirement.version),'--title','过期修改']),{code:'VERSION_CONFLICT'});
+  assert.equal((await exec(['requirement','get',requirement.id])).data.title,'已修改的需求');
+  await exec(['auth','logout']);await assert.rejects(exec(['project','list']),{code:'LOGIN_REQUIRED'});
+  assert.equal(db.prepare('SELECT count(*) n FROM requirements').get().n,1);
+});
 test('真实后端闭环：登录、成员、录入、改期、并发冲突、角色拒绝、审计和退出',async t=>{
   const {store}=await fixture(t),db=openDatabase(':memory:');t.after(()=>db.close());
   const app=createApplication({db,publicOrigin:url,secureCookies:false,logger:{info(){},error(){}}});

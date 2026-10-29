@@ -143,7 +143,7 @@ export function heading(title, description, actionsHtml = '', scope = '') {
 }
 /** 团队欢迎区：保留真实问候、全局待办与原有操作；小星仅作品牌陪伴。 */
 export function workbenchWelcome({ scope = '', title = '', summaryHtml = '', actionsHtml = '' } = {}) {
-  return `<section class="hero"><div class="hero-copy"><span class="scope-pill">${esc(scope)}</span><h1>${esc(title)}</h1><p>${summaryHtml}</p></div>${actionsHtml ? `<div class="page-actions">${actionsHtml}</div>` : ''}<figure class="hero-companion"><img src="/assets/xiaoxing-indigo.png" width="1254" height="1254" alt="小星，星引研发台的卡通项目伙伴，身穿靛蓝夹克，眨眼比耶" decoding="async"><figcaption>小星 · 你的项目伙伴</figcaption></figure></section>`;
+  return `<section class="hero"><div class="hero-copy"><span class="scope-pill">${esc(scope)}</span><h1>${esc(title)}</h1><p>${summaryHtml}</p></div>${actionsHtml ? `<div class="page-actions">${actionsHtml}</div>` : ''}<figure class="hero-companion"><img src="/assets/xiaoxing-indigo-448.e54713320a77.webp" srcset="/assets/xiaoxing-indigo-192.7955c03f2b84.webp 192w, /assets/xiaoxing-indigo-448.e54713320a77.webp 448w" sizes="(max-width: 560px) 88px, (max-width: 1240px) 180px, 210px" width="448" height="448" alt="小星，星引研发台的卡通项目伙伴，身穿靛蓝夹克，眨眼比耶" decoding="async"><figcaption>小星 · 你的项目伙伴</figcaption></figure></section>`;
 }
 /** 分区标题（页面内的二级标题）。 */
 export function sectionHeading(title, { count, actionsHtml = '' } = {}) {
