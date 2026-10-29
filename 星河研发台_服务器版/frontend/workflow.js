@@ -1,6 +1,7 @@
 // Shared, side-effect-free workflow rules used by the browser and the server.
 export const REQUIREMENT_STATUSES = Object.freeze(['未确定', '待评审', '已确定', '待排期', '已排期', '开发中', '测试中', '已完成', '已终止']);
 export const TASK_STATUSES = Object.freeze(['wait', 'develop', 'test', 'done', 'terminated', '待开始', '开发中', '测试中', '已完成', '已终止']);
+export const TASK_STATUS_LABELS = Object.freeze({ wait: '待开始', develop: '开发中', test: '测试中', done: '已完成', terminated: '已终止' });
 export const taskStage = status => ({ '待开始': 'wait', '开发中': 'develop', '测试中': 'test', '已完成': 'done', '已终止': 'terminated' }[status] || status);
 
 // Project roles. The system administrator acts as the pseudo role 'admin' in every
